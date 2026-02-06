@@ -5,7 +5,8 @@ A powerful semantic code search tool for local repositories using **RAG (Retriev
 ## Features
 
 - 🔍 **Semantic Search** - Find code by meaning, not just keywords
-- 🚀 **Hybrid Scoring** - Combines semantic similarity (60%) with keyword matching (40%)
+- 🚀 **RRF Hybrid Fusion** - Uses Reciprocal Rank Fusion to combine semantic + BM25 rankings for superior recall
+- 🧮 **Code-Optimized BM25** - Custom tokenization handling snake_case, camelCase, and kebab-case identifiers
 - 📁 **Smart Indexing** - Incremental updates, only processes changed files
 - 🦙 **Local Embeddings** - Uses Ollama for 100% local, private embeddings
 - 🚫 **Git-Aware** - Automatically respects `.gitignore` rules
@@ -116,7 +117,7 @@ Workspace RAG Search Tool
   "total_candidates": 7,
   "results": "Found 7 relevant snippets, showing top 3: matching 'utils'
 
---- Result 1 (semantic: 0.647, keyword: 0.75, blended: 0.688) ---
+--- Result 1 (semantic: 0.647, bm25: 0.75, blended: 0.688) ---
 [File: utils/file_utils.py]
 rue if file can be read as text, False otherwise
     \"\"\"
@@ -159,7 +160,7 @@ def format_size(size_bytes: int) -> str:
     Returns:
         Human readable string (e....
 
---- Result 2 (semantic: 0.53, keyword: 0.75, blended: 0.618) ---
+--- Result 2 (semantic: 0.53, bm25: 0.75, blended: 0.618) ---
 [File: utils/__init__.py]
 \"\"\"Utility modules for workspace_rag_search_tool.
 
@@ -180,7 +181,7 @@ __all__ = [
     \"PathResolver\",
 ]...
 
---- Result 3 (semantic: 0.577, keyword: 0.5, blended: 0.546) ---
+--- Result 3 (semantic: 0.577, bm25: 0.5, blended: 0.546) ---
 [File: utils/file_utils.py]
 \"\"\"File utility functions for workspace indexing.
 
@@ -273,7 +274,7 @@ The `search_workspace()` method returns a JSON string with the following structu
   "status": "success",
   "count": 5,
   "total_candidates": 23,
-  "results": "Found 23 relevant snippets, showing top 5:\n\n--- Result 1 (semantic: 0.92, keyword: 0.8, blended: 0.87) ---\n[File: src/auth.py]\n\ndef authenticate_user(token):\n    ...",
+  "results": "Found 23 relevant snippets, showing top 5:\n\n--- Result 1 (semantic: 0.92, bm25: 0.8, blended: 0.87) ---\n[File: src/auth.py]\n\ndef authenticate_user(token):\n    ...",
   "query": "authentication middleware"
 }
 ```
@@ -289,9 +290,50 @@ The `search_workspace()` method returns a JSON string with the following structu
 
 2. **Search Phase:**
    - Converts query to embedding vector
-   - Retrieves semantically similar chunks
-   - Applies hybrid scoring (semantic + keyword)
-   - Returns ranked results with file context
+   - **Independent Retrieval**: Retrieves top-k results from both semantic search (ChromaDB) and BM25 (full corpus)
+   - **RRF Fusion**: Combines rankings using Reciprocal Rank Fusion formula: `score(d) = Σ 1/(k + rank_d)`
+   - Documents appearing in both result lists get boosted scores
+   - BM25 uses code-optimized tokenization for better identifier matching
+   - Returns ranked results with coverage statistics (semantic-only, BM25-only, both methods)
+
+### Reciprocal Rank Fusion (RRF)
+
+RRF is a proven method for combining multiple ranked result lists without requiring score normalization:
+
+```
+RRF_score(d) = 1/(k + rank_semantic) + 1/(k + rank_bm25)
+```
+
+Where `k=60` (configurable via `rrf_k` parameter). Benefits:
+- **Better Recall**: BM25 can surface documents missed by semantic search
+- **No Score Normalization**: Uses ranks, not raw scores
+- **Robust**: Handles different score scales across retrieval methods
+- **Boosted Consensus**: Documents ranked well by both methods get highest scores
+
+```python
+# Adjust RRF constant (default: 60)
+# Lower values = more aggressive rank differences
+# Higher values = more forgiving of rank differences
+results = tool.search_workspace("authentication", rrf_k=60)
+```
+
+### Search Coverage Statistics
+
+The search response now includes coverage information showing how many results came from each retrieval method:
+
+```json
+{
+  "status": "success",
+  "count": 5,
+  "rrf_k": 60,
+  "coverage": {
+    "semantic_only": 2,
+    "bm25_only": 1,
+    "both_methods": 2
+  },
+  "results": "..."
+}
+```
 
 > [!WARNING]
 > The `preview_window` parameter limits how many characters are displayed from the start of each result. If your search term appears later in the chunk, it may not be visible in the truncated preview. Set `preview_window=None` (default) to display the full chunk content and ensure matches are always visible.

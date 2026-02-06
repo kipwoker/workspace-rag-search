@@ -8,7 +8,9 @@ import chromadb
 from chromadb.api.models.Collection import Collection
 
 from async_ollama_embedding_function import AsyncOllamaEmbeddingFunction
+from bm25 import create_bm25_index, BM25IndexType
 from ollama_config import OLLAMA_BASE_URL, RAG_CONFIG_DEFAULT, RAGConfig
+from rrf import ReciprocalRankFusion
 from utils import is_text_file, compute_file_hash, format_size, GitignoreParser, PathResolver
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,8 @@ class WorkspaceRagSearchTool:
     """Semantic search tool for workspace code using RAG (Retrieval-Augmented Generation).
     
     This tool indexes workspace files using ChromaDB with Ollama embeddings,
-    supporting hybrid search combining semantic similarity and keyword matching.
+    supporting hybrid search combining semantic similarity and BM25 keyword scoring
+    using Reciprocal Rank Fusion (RRF).
     
     Files are automatically filtered using:
     - .gitignore rules (built-in parsing)
@@ -29,9 +32,10 @@ class WorkspaceRagSearchTool:
     Features:
         - Incremental indexing (only processes changed files)
         - Content-based file detection (no extension hardcoding)
-        - Hybrid search (60% semantic + 40% keyword scoring)
+        - Hybrid search with RRF (combines semantic + BM25 rankings)
         - Path-based filtering for search results
         - Configurable chunking with overlap for better context
+        - Code-optimized BM25 with camelCase/snake_case tokenization
     
     Example:
         >>> tool = WorkspaceRagSearchTool("/path/to/workspace")
@@ -405,18 +409,74 @@ class WorkspaceRagSearchTool:
             logger.error("Error adding documents batch: %s", e)
             raise
 
+    def _build_global_bm25_index(self, path_filter: Optional[str] = None) -> BM25IndexType:
+        """Build a BM25 index from all documents in the collection.
+        
+        This creates an index over the entire corpus for independent BM25 retrieval,
+        which is essential for proper RRF fusion. The BM25 variant is selected
+        based on the rag_config.bm25_implementation setting.
+        
+        Args:
+            path_filter: Optional filter to only include documents matching path
+            
+        Returns:
+            BM25 index populated with all documents
+        """
+        bm25_index = create_bm25_index(self.rag_config.bm25_implementation)
+        
+        # Get all documents from collection
+        batch_size = 1000
+        offset = 0
+        
+        while True:
+            batch = self._collection.get(
+                limit=batch_size,
+                offset=offset,
+                include=["documents", "metadatas"]
+            )
+            
+            if not batch or not batch.get("ids"):
+                break
+            
+            ids = batch["ids"]
+            documents = batch.get("documents", [])
+            metadatas = batch.get("metadatas", [])
+            
+            for i, doc_id in enumerate(ids):
+                doc = documents[i] if i < len(documents) else ""
+                metadata = metadatas[i] if metadatas and i < len(metadatas) else {}
+                
+                # Apply path filter if specified
+                if path_filter:
+                    file_path = metadata.get("file_path", "")
+                    if path_filter.lower() not in file_path.lower():
+                        continue
+                
+                bm25_index.add_document(doc_id, doc)
+            
+            if len(ids) < batch_size:
+                break
+            
+            offset += batch_size
+        
+        logger.debug("Built BM25 index with %d documents", len(bm25_index))
+        return bm25_index
+
     def search_workspace(
         self,
         query: str,
         limit: int = 5,
         path_filter: Optional[str] = None,
-        preview_window: Optional[int] = None
+        preview_window: Optional[int] = None,
+        rrf_k: int = 60
     ) -> str:
         """Search the workspace knowledge base for relevant code snippets.
         
-        Uses hybrid search combining BM25-style keyword matching with semantic
-        similarity scoring. Results are ranked using a blended score
-        (60% semantic + 40% keyword).
+        Uses Reciprocal Rank Fusion (RRF) to combine semantic similarity and BM25
+        keyword rankings. RRF fuses independent rankings from both methods,
+        providing better recall than simple score blending.
+        
+        RRF Formula: score(d) = sum(1 / (k + rank_d)) for each retrieval method
         
         Args:
             query: Search query to find relevant code/text
@@ -424,12 +484,13 @@ class WorkspaceRagSearchTool:
             path_filter: Optional substring to filter results by file path
             preview_window: Maximum characters for content preview (default None).
                             Set to None for no truncation.
+            rrf_k: RRF constant (default 60). Higher values reduce impact of ranking differences.
 
         Returns:
             JSON string with search results containing:
                 - status: "success" or "error"
                 - count: Number of results found
-                - results: Formatted string with snippets and scores
+                - results: Formatted string with snippets and RRF scores
                 - query: The original search query
                 
         Example:
@@ -452,14 +513,35 @@ class WorkspaceRagSearchTool:
             })
         
         try:
-            # Retrieve more candidates than needed to give hybrid scorer better options
-            n_results = min(limit * 10, 100)
+            # Phase 1: Independent Retrieval
+            # Get semantic results from ChromaDB
+            semantic_limit = min(limit * 20, 100)  # Get more candidates for better fusion
             semantic_results = self._collection.query(
                 query_texts=[query.strip()],
-                n_results=n_results
+                n_results=semantic_limit
             )
             
-            if not semantic_results or not semantic_results.get("documents"):
+            # Get BM25 results from global index
+            bm25_index = self._build_global_bm25_index(path_filter)
+            
+            if len(bm25_index) == 0:
+                return json.dumps({
+                    "status": "success",
+                    "count": 0,
+                    "message": "No documents in index" if not path_filter else f"No documents matching path filter: {path_filter}",
+                    "query": query
+                })
+            
+            bm25_scores = bm25_index.score(query)
+            bm25_ranked = sorted(bm25_scores.items(), key=lambda x: x[1], reverse=True)
+            bm25_ranked = bm25_ranked[:semantic_limit]  # Match semantic result count
+            
+            # Check if we have any results
+            semantic_empty = (not semantic_results or 
+                            not semantic_results.get("documents") or 
+                            not semantic_results["documents"][0])
+            
+            if semantic_empty and not bm25_ranked:
                 return json.dumps({
                     "status": "success",
                     "count": 0,
@@ -467,72 +549,108 @@ class WorkspaceRagSearchTool:
                     "query": query
                 })
             
-            documents = semantic_results["documents"][0]
-            doc_ids = semantic_results.get("ids", [[]])[0]
-            distances = semantic_results.get("distances", [[]])[0]
-            metadatas = semantic_results.get("metadatas", [[]])[0]
-            
-            if path_filter:
-                filtered_indices = []
-                for i, meta in enumerate(metadatas):
-                    if meta and path_filter.lower() in meta.get("file_path", "").lower():
-                        filtered_indices.append(i)
+            # Phase 2: Prepare ranked lists for RRF
+            # Format: list of (doc_id, score) tuples, sorted by relevance
+            semantic_ranked: List[Tuple[str, float]] = []
+            if not semantic_empty:
+                doc_ids = semantic_results["ids"][0]
+                distances = semantic_results.get("distances", [[]])[0]
+                metadatas = semantic_results.get("metadatas", [[]])[0]
                 
-                if not filtered_indices:
-                    return json.dumps({
-                        "status": "success",
-                        "count": 0,
-                        "message": "No results found matching path filter",
-                        "query": query,
-                        "path_filter": path_filter
-                    })
-                
-                documents = [documents[i] for i in filtered_indices]
-                doc_ids = [doc_ids[i] for i in filtered_indices]
-                distances = [distances[i] for i in filtered_indices]
-                metadatas = [metadatas[i] for i in filtered_indices]
+                for i, doc_id in enumerate(doc_ids):
+                    # Apply path filter if specified
+                    if path_filter and metadatas and i < len(metadatas):
+                        file_path = metadatas[i].get("file_path", "")
+                        if path_filter.lower() not in file_path.lower():
+                            continue
+                    
+                    # Convert distance to similarity score (cosine distance -> similarity)
+                    distance = distances[i] if i < len(distances) else 1.0
+                    semantic_score = max(0.0, 1.0 - float(distance))
+                    semantic_ranked.append((doc_id, semantic_score))
             
-            keywords = [kw for kw in query.lower().split() if len(kw) > 2]
+            # Phase 3: RRF Fusion
+            rrf = ReciprocalRankFusion(k=rrf_k)
+            ranked_lists = []
+            if semantic_ranked:
+                ranked_lists.append(semantic_ranked)
+            if bm25_ranked:
+                ranked_lists.append(bm25_ranked)
+            
+            fused_results = rrf.fuse(ranked_lists, limit=limit)
+            
+            if not fused_results:
+                return json.dumps({
+                    "status": "success",
+                    "count": 0,
+                    "message": "No results after fusion",
+                    "query": query
+                })
+            
+            # Phase 4: Fetch document details for top results
+            fused_doc_ids = [doc_id for doc_id, _ in fused_results]
+            doc_data = self._collection.get(
+                ids=fused_doc_ids,
+                include=["documents", "metadatas"]
+            )
+            
+            # Create lookup maps
+            doc_lookup = {}
+            metadata_lookup = {}
+            if doc_data:
+                for i, doc_id in enumerate(doc_data.get("ids", [])):
+                    docs = doc_data.get("documents", [])
+                    metas = doc_data.get("metadatas", [])
+                    if i < len(docs):
+                        doc_lookup[doc_id] = docs[i]
+                    if i < len(metas):
+                        metadata_lookup[doc_id] = metas[i]
+            
+            # Get individual ranks for display
+            semantic_rank_map = {doc_id: rank + 1 for rank, (doc_id, _) in enumerate(semantic_ranked)}
+            bm25_rank_map = {doc_id: rank + 1 for rank, (doc_id, _) in enumerate(bm25_ranked)}
+            
+            # Build final results
             scored_results = []
-            
-            for i, doc in enumerate(documents):
-                distance = distances[i] if i < len(distances) else 1.0
-                doc_id = doc_ids[i] if i < len(doc_ids) else f"doc_{i}"
-                metadata = metadatas[i] if metadatas and i < len(metadatas) else {}
+            for doc_id, rrf_score in fused_results:
+                doc = doc_lookup.get(doc_id, "")
+                metadata = metadata_lookup.get(doc_id, {})
                 
-                semantic_score = max(0.0, 1.0 - float(distance))
+                semantic_rank = semantic_rank_map.get(doc_id, None)
+                bm25_rank = bm25_rank_map.get(doc_id, None)
                 
-                doc_lower = doc.lower()
-                keyword_matches = sum(1 for kw in keywords if kw in doc_lower)
-                keyword_score = min(keyword_matches / max(len(keywords), 1), 1.0)
-                
-                blended_score = (semantic_score * 0.6) + (keyword_score * 0.4)
+                # Get individual scores if available
+                semantic_score = next((score for id, score in semantic_ranked if id == doc_id), 0.0)
+                bm25_score = bm25_scores.get(doc_id, 0.0)
                 
                 scored_results.append({
                     "doc": doc,
                     "doc_id": doc_id,
                     "metadata": metadata,
+                    "rrf_score": round(rrf_score, 4),
+                    "semantic_rank": semantic_rank,
+                    "bm25_rank": bm25_rank,
                     "semantic_score": round(semantic_score, 3),
-                    "keyword_score": round(keyword_score, 3),
-                    "blended_score": round(blended_score, 3)
+                    "bm25_score": round(bm25_score, 3)
                 })
             
-            scored_results.sort(key=lambda x: x["blended_score"], reverse=True)
-            
-            top_results = scored_results[:limit]
+            # Format output
             output_lines = [
-                f"Found {len(scored_results)} relevant snippets, showing top {len(top_results)}:"
-                + (f" matching '{path_filter}'" if path_filter else ""),
+                f"Found {len(scored_results)} relevant snippets using RRF fusion:",
                 ""
             ]
             
-            for i, result in enumerate(top_results, 1):
+            for i, result in enumerate(scored_results, 1):
                 doc = result["doc"]
-                scores = (
-                    f"(semantic: {result['semantic_score']}, "
-                    f"keyword: {result['keyword_score']}, "
-                    f"blended: {result['blended_score']})"
-                )
+                
+                # Build rank info string
+                rank_info = f"RRF: {result['rrf_score']}"
+                if result['semantic_rank']:
+                    rank_info += f" | Semantic rank: #{result['semantic_rank']}"
+                if result['bm25_rank']:
+                    rank_info += f" | BM25 rank: #{result['bm25_rank']}"
+                
+                scores = f"(semantic: {result['semantic_score']}, bm25: {result['bm25_score']})"
                 
                 # Parse document format: [File: path]\n\ncontent
                 lines = doc.split("\n")
@@ -542,19 +660,29 @@ class WorkspaceRagSearchTool:
                 if preview_window is None:
                     content_preview = content
                 else:
-                    content_preview = content[:preview_window] + "..."
+                    content_preview = content[:preview_window] + ("..." if len(content) > preview_window else "")
                 
                 output_lines.extend([
-                    f"--- Result {i} {scores} ---",
+                    f"--- Result {i} {rank_info} {scores} ---",
                     file_line,
                     content_preview,
                     ""
                 ])
             
+            # Calculate coverage stats
+            semantic_hits = sum(1 for r in scored_results if r['semantic_rank'] is not None)
+            bm25_hits = sum(1 for r in scored_results if r['bm25_rank'] is not None)
+            both_hits = sum(1 for r in scored_results if r['semantic_rank'] and r['bm25_rank'])
+            
             return json.dumps({
                 "status": "success",
-                "count": len(top_results),
-                "total_candidates": len(scored_results),
+                "count": len(scored_results),
+                "rrf_k": rrf_k,
+                "coverage": {
+                    "semantic_only": semantic_hits - both_hits,
+                    "bm25_only": bm25_hits - both_hits,
+                    "both_methods": both_hits
+                },
                 "results": "\n".join(output_lines).strip(),
                 "query": query
             }, indent=2)
