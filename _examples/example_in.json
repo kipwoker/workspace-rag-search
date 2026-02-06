@@ -1,0 +1,7 @@
+{
+    "workspace_path": ".",
+    "query": "compute file hash defintion",
+    "path_filter": "utils",
+    "limit": 3,
+    "preview_window": 1500
+}
