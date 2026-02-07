@@ -8,6 +8,7 @@ A powerful semantic code search tool for local repositories using **RAG (Retriev
 - 🚀 **RRF Hybrid Fusion** - Uses Reciprocal Rank Fusion to combine semantic + BM25 rankings for superior recall
 - 🎯 **Cross-Encoder Reranking** - Optional LLM-based reranking for +25-40% relevance improvement
 - 🎭 **MMR Diversity Reranking** - Maximal Marginal Relevance reduces duplicate results from the same files
+- 🧠 **HyDE Query Expansion** - Hypothetical Document Embeddings for better retrieval on vague queries
 - 🧮 **Code-Optimized BM25** - Custom tokenization handling snake_case, camelCase, and kebab-case identifiers
 - 📊 **Performance Metrics** - Detailed latency, diversity, and coverage statistics for observability
 - 📁 **Smart Indexing** - Incremental updates, only processes changed files
@@ -482,33 +483,8 @@ Cross-encoder reranking uses an LLM to score query-document relevance, providing
 3. Results are reordered by the new relevance scores
 4. Final results show both RRF and reranked scores
 
-**Configuration** (in `ollama_config.py`):
-```python
-from ollama_config import RAGConfig, RERANK_MODEL
-
-RAG_CONFIG_DEFAULT = RAGConfig(
-    vector_store_path="./.vectorstore",
-    embedding_model="nomic-embed-text",
-    chunk_size=1000,
-    chunk_overlap=200,
-    bytes_limit=100000,
-    max_concurrent_requests=10,
-    embedding_batch_size=32,
-    bm25_implementation="plus",        # BM25 variant: "standard", "plus", "l", "t", "adpt"
-    rerank_enabled=True,               # Enable/disable reranking
-    rerank_model="phi3:mini",          # Options: "qwen3:0.6b", "phi3:mini"
-    rerank_top_k=20,                   # Number of candidates to rerank
-    rerank_max_concurrent=5,           # Concurrent requests (lower = less VRAM)
-    mmr_enabled=True,                  # Enable MMR diversity reranking
-    mmr_lambda=0.6,                    # Relevance-diversity trade-off (0-1)
-    mmr_max_file_chunks=2,             # Max chunks per file (None = unlimited)
-    mmr_candidates=20,                 # Number of candidates to consider
-    cache_enabled=True,                # Enable query result caching
-    cache_max_size=100,                # Maximum cache entries
-    cache_ttl_seconds=None,            # No expiration (cache until refresh)
-    metrics_enabled=True,              # Enable performance metrics by default
-)
-```
+**Configuration**
+- Check the `ollama_config.py`
 
 **Performance Presets:**
 - `RAG_CONFIG_DEFAULT`: Reranking, caching, and metrics enabled
@@ -578,6 +554,40 @@ Where:
 - ✅ Exploring a codebase (not looking for specific implementations)
 - ❌ Looking for the most relevant single implementation
 - ❌ Query is very specific (e.g., "function foo in bar.py")
+
+### HyDE Query Expansion
+
+**Hypothetical Document Embeddings (HyDE)** improves retrieval on complex or vague queries by generating a hypothetical answer document and using it for semantic search.
+
+**How it works:**
+1. User query (e.g., "compute file hash defintion") is sent to an LLM
+2. LLM generates a hypothetical code snippet or documentation excerpt
+3. This hypothetical document is used for semantic search instead of the original query
+4. The richer context often matches actual code more closely than vague user queries
+
+**HyDE Reranking Strategies:**
+When HyDE is enabled, you can choose how the reranker uses the generated document:
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `"hyde"` (default) | Use HyDE document for reranking. Aligns reranker with semantic search. | Most cases - ensures consistency |
+| `"original"` | Use original query for reranking. Legacy behavior. | When you want reranker to judge based on exact query terms |
+| `"combined"` | Use both: `"Query: X\n\nHypothetical Answer:\nY"` | When you want the benefits of both approaches |
+| `"skip"` | Skip reranking when HyDE is enabled | Faster results, trust semantic search completely |
+
+**Why this matters:** Without proper alignment, semantic search may find the right document using the HyDE context, but the reranker (using the original vague query) may incorrectly deprioritize it. The `"hyde"` strategy ensures both stages use the same rich context.
+
+**Performance Presets:**
+- `RAG_CONFIG_DEFAULT`: HyDE enabled with `hyde` reranking strategy
+- `RAG_CONFIG_FAST`: HyDE disabled for speed
+- `RAG_CONFIG_CONSERVATIVE`: HyDE enabled with single hypothesis for lower latency
+
+**When to use HyDE:**
+- ✅ Queries are vague or ambiguous ("auth stuff", "that hash thing")
+- ✅ Looking for implementation patterns rather than specific names
+- ✅ Natural language queries that don't match code identifiers
+- ❌ Query contains exact function/class names
+- ❌ Very specific technical queries ("MD5 implementation in file_utils.py")
 
 ### Reciprocal Rank Fusion (RRF)
 

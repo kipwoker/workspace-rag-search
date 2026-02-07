@@ -137,7 +137,8 @@ class QueryCache:
         limit: int,
         path_filter: Optional[str],
         rrf_k: int,
-        rerank_enabled: bool
+        rerank_enabled: bool,
+        hyde_enabled: bool = False
     ) -> str:
         """Create a unique cache key from query parameters.
         
@@ -150,6 +151,7 @@ class QueryCache:
             path_filter: Optional path filter
             rrf_k: RRF constant
             rerank_enabled: Whether reranking is enabled
+            hyde_enabled: Whether HyDE query expansion is enabled
             
         Returns:
             String key for cache lookup
@@ -164,7 +166,8 @@ class QueryCache:
             f"l:{limit}",
             f"p:{path_filter_str}",
             f"rrf:{rrf_k}",
-            f"rnk:{rerank_enabled}"
+            f"rnk:{rerank_enabled}",
+            f"hyde:{hyde_enabled}"
         ]
         return "|".join(key_parts)
     
@@ -174,7 +177,8 @@ class QueryCache:
         limit: int,
         path_filter: Optional[str],
         rrf_k: int,
-        rerank_enabled: bool
+        rerank_enabled: bool,
+        hyde_enabled: bool = False
     ) -> Optional[str]:
         """Get cached result if available and not expired.
         
@@ -184,6 +188,7 @@ class QueryCache:
             path_filter: Optional path filter used
             rrf_k: RRF constant used
             rerank_enabled: Whether reranking was enabled
+            hyde_enabled: Whether HyDE query expansion was enabled
             
         Returns:
             Cached result string or None if not found/expired
@@ -191,7 +196,7 @@ class QueryCache:
         if not self.enabled:
             return None
         
-        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled)
+        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled, hyde_enabled)
         
         with self._lock:
             entry = self._cache.get(key)
@@ -231,7 +236,8 @@ class QueryCache:
         path_filter: Optional[str],
         rrf_k: int,
         rerank_enabled: bool,
-        result: str
+        result: str,
+        hyde_enabled: bool = False
     ) -> None:
         """Store result in cache.
         
@@ -241,12 +247,13 @@ class QueryCache:
             path_filter: Optional path filter used
             rrf_k: RRF constant used
             rerank_enabled: Whether reranking was enabled
+            hyde_enabled: Whether HyDE query expansion was enabled
             result: Result string to cache
         """
         if not self.enabled:
             return
         
-        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled)
+        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled, hyde_enabled)
         
         with self._lock:
             # If key exists, update it and move to end
@@ -372,20 +379,20 @@ class QueryCache:
         with self._lock:
             return len(self._cache)
     
-    def __contains__(self, key_tuple: Tuple[str, int, Optional[str], int, bool]) -> bool:
+    def __contains__(self, key_tuple: Tuple[str, int, Optional[str], int, bool, bool]) -> bool:
         """Check if a query is in cache.
         
         Args:
-            key_tuple: (query, limit, path_filter, rrf_k, rerank_enabled)
+            key_tuple: (query, limit, path_filter, rrf_k, rerank_enabled, hyde_enabled)
             
         Returns:
             True if in cache and not expired
         """
-        if not self.enabled or len(key_tuple) != 5:
+        if not self.enabled or len(key_tuple) != 6:
             return False
         
-        query, limit, path_filter, rrf_k, rerank_enabled = key_tuple
-        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled)
+        query, limit, path_filter, rrf_k, rerank_enabled, hyde_enabled = key_tuple
+        key = self._make_key(query, limit, path_filter, rrf_k, rerank_enabled, hyde_enabled)
         
         with self._lock:
             entry = self._cache.get(key)

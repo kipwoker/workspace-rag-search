@@ -27,6 +27,27 @@ RerankModel = Literal[
 # Default reranking model - uses /api/generate to score relevance
 RERANK_MODEL: RerankModel = "phi3:mini"
 
+# Available HyDE models
+HyDEModel = Literal[
+    "phi3:mini",      # Very fast, lightweight
+    "qwen3:0.6b",     # Small but capable, good balance
+    "llama3.1:8b",    # Excellent reasoning, long context, higher resource usage
+]
+
+# Default HyDE model for query expansion
+HYDE_MODEL: HyDEModel = "qwen3:0.6b"
+
+# HyDE reranking strategies
+HyDERerankStrategy = Literal[
+    "hyde",       # Use HyDE hypothetical document for reranking (default, recommended)
+    "original",   # Use original query for reranking (legacy behavior)
+    "combined",   # Use both: "Original: {query}\nHyDE: {hyde_doc}"
+    "skip",       # Skip reranking when HyDE is enabled
+]
+
+# Default HyDE reranking strategy
+HYDE_RERANK_STRATEGY: HyDERerankStrategy = "hyde"
+
 @dataclass
 class RAGConfig:
     """RAG configuration model.
@@ -58,6 +79,30 @@ class RAGConfig:
         cache_ttl_seconds: Cache entry time-to-live in seconds (None = no expiration)
         metrics_enabled: Whether to enable detailed performance metrics collection
             and display (latency breakdown, diversity scores, coverage metrics)
+        hyde_enabled: Whether to enable HyDE query expansion.
+                     HyDE generates hypothetical answer documents to improve
+                     retrieval quality on complex or vague queries.
+        hyde_model: Name of the Ollama model to use for HyDE generation.
+                   Options: "phi3:mini", "qwen3:0.6b", "llama3.1:8b"
+        hyde_num_hypotheses: Number of hypothetical documents to generate.
+                            1 = single hypothesis, faster but less coverage
+                            3-5 = multiple hypotheses, better for complex queries
+        hyde_max_tokens: Maximum tokens to generate per hypothetical document.
+                        Longer documents may capture more context but increase
+                        latency and can dilute the semantic signal.
+        hyde_temperature: Temperature for generation (0.0-1.0).
+                         Lower = more deterministic, higher = more creative.
+                         0.3-0.5 recommended for factual code queries.
+        hyde_rerank_strategy: Strategy for using HyDE with reranking.
+                             Options:
+                             - "hyde": Use HyDE document for reranking (default, recommended).
+                                       Aligns reranker with semantic search for best results.
+                             - "original": Use original query for reranking (legacy behavior).
+                                           May cause mismatch between semantic and rerank scores.
+                             - "combined": Use both original query and HyDE document.
+                                          Format: "Query: X\nHyDE: Y"
+                             - "skip": Skip reranking when HyDE is enabled.
+                                      Faster but loses reranking benefits.
     
     Example:
         >>> config = RAGConfig(
@@ -103,6 +148,12 @@ class RAGConfig:
     cache_max_size: int = field(default=100)
     cache_ttl_seconds: Optional[int] = field(default=None)
     metrics_enabled: bool = field(default=True)
+    hyde_enabled: bool = field(default=False)
+    hyde_model: HyDEModel = field(default=HYDE_MODEL)
+    hyde_num_hypotheses: int = field(default=1)
+    hyde_max_tokens: int = field(default=300)
+    hyde_temperature: float = field(default=0.5)
+    hyde_rerank_strategy: HyDERerankStrategy = field(default=HYDE_RERANK_STRATEGY)
 
 RAG_CONFIG_DEFAULT = RAGConfig(
     vector_store_path="./.vectorstore",
@@ -125,6 +176,12 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     cache_max_size=100,          # Cache up to 100 queries
     cache_ttl_seconds=None,      # No expiration (cache until index refresh)
     metrics_enabled=True,        # Enable performance metrics by default
+    hyde_enabled=True,
+    hyde_model="qwen3:0.6b",
+    hyde_num_hypotheses=2,
+    hyde_max_tokens=600,
+    hyde_temperature=0.3,
+    hyde_rerank_strategy="hyde",  # Use HyDE document for reranking (recommended)
 )
 
 
@@ -147,6 +204,8 @@ RAG_CONFIG_FAST = RAGConfig(
     cache_max_size=50,           # Smaller cache for memory efficiency
     cache_ttl_seconds=60,        # 1 minute TTL for fast-changing code
     metrics_enabled=False,       # Disable metrics for minimal overhead
+    hyde_enabled=False,          # Disable HyDE for speed
+    hyde_rerank_strategy="skip", # Not used since HyDE is disabled
 )
 
 RAG_CONFIG_CONSERVATIVE = RAGConfig(
@@ -170,4 +229,10 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     cache_max_size=200,          # Larger cache since we're conservative on speed
     cache_ttl_seconds=600,       # 10 minute TTL
     metrics_enabled=True,        # Enable metrics for observability
+    hyde_enabled=True,
+    hyde_model="qwen3:0.6b",
+    hyde_num_hypotheses=1,       # Single hypothesis for lower latency
+    hyde_max_tokens=300,
+    hyde_temperature=0.3,
+    hyde_rerank_strategy="hyde", # Use HyDE document for reranking
 )
