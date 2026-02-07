@@ -364,6 +364,9 @@ The `search_workspace()` method returns a JSON string with the following structu
 }
 ```
 
+> [!WARNING]
+> The `preview_window` parameter limits how many characters are displayed from the start of each result. If your search term appears later in the chunk, it may not be visible in the truncated preview. Set `preview_window=None` (default) to display the full chunk content and ensure matches are always visible.
+
 ## How It Works
 
 1. **Indexing Phase:**
@@ -440,28 +443,6 @@ Where `k=60` (configurable via `rrf_k` parameter). Benefits:
 # Higher values = more forgiving of rank differences
 results = tool.search_workspace("authentication", rrf_k=60)
 ```
-
-### Search Coverage Statistics
-
-The search response now includes coverage information showing how many results came from each retrieval method:
-
-```json
-{
-  "status": "success",
-  "count": 5,
-  "rrf_k": 60,
-  "coverage": {
-    "semantic_only": 2,
-    "bm25_only": 1,
-    "both_methods": 2
-  },
-  "results": "..."
-}
-```
-
-> [!WARNING]
-> The `preview_window` parameter limits how many characters are displayed from the start of each result. If your search term appears later in the chunk, it may not be visible in the truncated preview. Set `preview_window=None` (default) to display the full chunk content and ensure matches are always visible.
-
 
 ### Large Repositories
 
