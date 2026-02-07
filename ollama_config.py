@@ -46,6 +46,13 @@ class RAGConfig:
             Options: "phi3:mini", "qwen3:0.6b"
         rerank_top_k: Number of documents to rerank (more = better quality but slower)
         rerank_max_concurrent: Concurrent reranking requests (lower = less VRAM)
+        mmr_enabled: Whether to enable MMR diversity reranking
+        mmr_lambda: MMR lambda parameter (0-1) for relevance-diversity trade-off.
+                   1.0 = pure relevance, 0.0 = pure diversity, 0.5-0.7 recommended
+        mmr_max_file_chunks: Maximum chunks to select from the same file.
+                            None means no file-level limit.
+        mmr_candidates: Number of candidates to consider for MMR reranking.
+                       Higher values give more diversity options but slower.
         cache_enabled: Whether to enable query result caching
         cache_max_size: Maximum number of cached query results
         cache_ttl_seconds: Cache entry time-to-live in seconds (None = no expiration)
@@ -66,6 +73,10 @@ class RAGConfig:
         ...     rerank_model="qwen3:0.6b",
         ...     rerank_top_k=20,
         ...     rerank_max_concurrent=5,
+        ...     mmr_enabled=True,
+        ...     mmr_lambda=0.6,
+        ...     mmr_max_file_chunks=2,
+        ...     mmr_candidates=20,
         ...     cache_enabled=True,
         ...     cache_max_size=100,
         ...     cache_ttl_seconds=300,
@@ -84,6 +95,10 @@ class RAGConfig:
     rerank_model: RerankModel = field(default=RERANK_MODEL)
     rerank_top_k: int = field(default=20)
     rerank_max_concurrent: int = field(default=5)
+    mmr_enabled: bool = field(default=True)
+    mmr_lambda: float = field(default=0.6)
+    mmr_max_file_chunks: Optional[int] = field(default=2)
+    mmr_candidates: int = field(default=20)
     cache_enabled: bool = field(default=True)
     cache_max_size: int = field(default=100)
     cache_ttl_seconds: Optional[int] = field(default=None)
@@ -102,6 +117,10 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=20,             # Rerank top 20 RRF results
     rerank_max_concurrent=5,     # 5 concurrent reranking requests
+    mmr_enabled=True,            # Enable MMR for better diversity
+    mmr_lambda=0.6,              # Higher lambda for more relevance focus
+    mmr_max_file_chunks=2,       # Only 1 chunk per file for maximum spread
+    mmr_candidates=20,           # Number of candidates to consider
     cache_enabled=True,          # Enable query caching by default
     cache_max_size=100,          # Cache up to 100 queries
     cache_ttl_seconds=None,      # No expiration (cache until index refresh)
@@ -123,6 +142,7 @@ RAG_CONFIG_FAST = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=20,
     rerank_max_concurrent=5,
+    mmr_enabled=False,           # Disable MMR for speed
     cache_enabled=True,          # Enable caching for repeated queries
     cache_max_size=50,           # Smaller cache for memory efficiency
     cache_ttl_seconds=60,        # 1 minute TTL for fast-changing code
@@ -142,6 +162,10 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=10,             # Rerank fewer documents
     rerank_max_concurrent=2,     # Lower VRAM usage
+    mmr_enabled=True,            # Enable MMR for better diversity
+    mmr_lambda=0.7,              # Higher lambda for more relevance focus
+    mmr_max_file_chunks=1,       # Only 1 chunk per file for maximum spread
+    mmr_candidates=15,
     cache_enabled=True,          # Enable caching
     cache_max_size=200,          # Larger cache since we're conservative on speed
     cache_ttl_seconds=600,       # 10 minute TTL

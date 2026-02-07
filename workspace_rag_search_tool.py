@@ -11,6 +11,7 @@ from chromadb.api.models.Collection import Collection
 from async_ollama_embedding_function import AsyncOllamaEmbeddingFunction
 from bm25 import create_bm25_index, BM25IndexType
 from cache import QueryCache
+from mmr import MMRReranker
 from ollama_config import OLLAMA_BASE_URL, RAG_CONFIG_DEFAULT, RAGConfig
 from reranker import CrossEncoderReranker
 from rrf import ReciprocalRankFusion
@@ -730,9 +731,54 @@ class WorkspaceRagSearchTool:
                     rerank_latency_ms, len(docs_for_rerank)
                 )
             
-            # Phase 5: Fetch document details for top results
+            # Phase 5: MMR Diversity Reranking (optional)
+            # Apply MMR to promote diversity in results
+            mmr_results = reranked_results
+            mmr_latency_ms = None
+            if self.rag_config.mmr_enabled and len(reranked_results) > 0:
+                mmr_start_time = time.time()
+                
+                # Get embeddings and metadata for MMR candidates
+                mmr_candidate_ids = [doc_id for doc_id, _ in reranked_results[:self.rag_config.mmr_candidates]]
+                mmr_doc_data = self._collection.get(
+                    ids=mmr_candidate_ids,
+                    include=["documents", "metadatas", "embeddings"]
+                )
+                
+                # Build MMR input: (doc_id, score, embedding, metadata)
+                mmr_input = []
+                for doc_id in mmr_candidate_ids:
+                    idx = mmr_doc_data.get("ids", []).index(doc_id)
+                    score = next((s for did, s in reranked_results if did == doc_id), 0.0)
+                    embedding = mmr_doc_data.get("embeddings", [])[idx] if idx >= 0 else None
+                    metadata = mmr_doc_data.get("metadatas", [])[idx] if idx >= 0 else {}
+                    if embedding is not None:
+                        mmr_input.append((doc_id, score, embedding, metadata))
+                
+                if mmr_input:
+                    # Apply MMR reranking
+                    mmr_reranker = MMRReranker(
+                        lambda_param=self.rag_config.mmr_lambda,
+                        max_file_chunks=self.rag_config.mmr_max_file_chunks,
+                        file_penalty_factor=0.1
+                    )
+                    
+                    mmr_reranked = mmr_reranker.rerank(mmr_input, top_k=limit)
+                    
+                    # Convert back to (doc_id, score) format with MMR scores
+                    mmr_results = [(doc_id, mmr_score) for doc_id, mmr_score, _, _ in mmr_reranked]
+                    
+                    logger.debug(
+                        "MMR reranking completed: %d candidates -> %d diverse results",
+                        len(mmr_input), len(mmr_results)
+                    )
+                
+                mmr_latency_ms = round((time.time() - mmr_start_time) * 1000, 2)
+                timing["mmr_ms"] = mmr_latency_ms
+            
+            # Phase 6: Fetch document details for top results
             phase_start = time.time()
-            final_doc_ids = [doc_id for doc_id, _ in reranked_results]
+            final_doc_ids = [doc_id for doc_id, _ in mmr_results]
             doc_data = self._collection.get(
                 ids=final_doc_ids,
                 include=["documents", "metadatas"]
@@ -757,7 +803,7 @@ class WorkspaceRagSearchTool:
             
             # Build final results
             scored_results = []
-            for rank, (doc_id, final_score) in enumerate(reranked_results, 1):
+            for rank, (doc_id, final_score) in enumerate(mmr_results, 1):
                 doc = doc_lookup.get(doc_id, "")
                 metadata = metadata_lookup.get(doc_id, {})
                 
@@ -771,6 +817,10 @@ class WorkspaceRagSearchTool:
                 # Get original RRF score for reference
                 rrf_score = next((score for id, score in fused_results if id == doc_id), 0.0)
                 
+                # Get MMR-specific metadata if available
+                mmr_relevance = metadata.get("mmr_relevance_score")
+                mmr_diversity = metadata.get("mmr_diversity_penalty")
+                
                 scored_results.append({
                     "doc": doc,
                     "doc_id": doc_id,
@@ -781,11 +831,18 @@ class WorkspaceRagSearchTool:
                     "semantic_rank": semantic_rank,
                     "bm25_rank": bm25_rank,
                     "semantic_score": round(semantic_score, 3),
-                    "bm25_score": round(bm25_score, 3)
+                    "bm25_score": round(bm25_score, 3),
+                    "mmr_relevance_score": round(mmr_relevance, 3) if mmr_relevance else None,
+                    "mmr_diversity_penalty": round(mmr_diversity, 3) if mmr_diversity else None
                 })
             
             # Format output
-            method_name = "RRF + Reranking" if self._reranker else "RRF fusion"
+            method_parts = ["RRF"]
+            if self._reranker:
+                method_parts.append("Reranking")
+            if self.rag_config.mmr_enabled:
+                method_parts.append("MMR")
+            method_name = " + ".join(method_parts)
             output_lines = [
                 f"Found {len(scored_results)} relevant snippets using {method_name}:",
                 ""
@@ -858,6 +915,15 @@ class WorkspaceRagSearchTool:
                 }
             else:
                 response["reranking"] = {"enabled": False}
+            
+            # Add MMR metadata if used
+            response["mmr"] = {
+                "enabled": self.rag_config.mmr_enabled,
+                "lambda": self.rag_config.mmr_lambda if self.rag_config.mmr_enabled else None,
+                "max_file_chunks": self.rag_config.mmr_max_file_chunks if self.rag_config.mmr_enabled else None,
+                "latency_ms": mmr_latency_ms,
+                "candidates": self.rag_config.mmr_candidates if self.rag_config.mmr_enabled else None
+            }
             
             # Add performance metrics if enabled
             if metrics_enabled:

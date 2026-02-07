@@ -7,6 +7,7 @@ A powerful semantic code search tool for local repositories using **RAG (Retriev
 - 🔍 **Semantic Search** - Find code by meaning, not just keywords
 - 🚀 **RRF Hybrid Fusion** - Uses Reciprocal Rank Fusion to combine semantic + BM25 rankings for superior recall
 - 🎯 **Cross-Encoder Reranking** - Optional LLM-based reranking for +25-40% relevance improvement
+- 🎭 **MMR Diversity Reranking** - Maximal Marginal Relevance reduces duplicate results from the same files
 - 🧮 **Code-Optimized BM25** - Custom tokenization handling snake_case, camelCase, and kebab-case identifiers
 - 📊 **Performance Metrics** - Detailed latency, diversity, and coverage statistics for observability
 - 📁 **Smart Indexing** - Incremental updates, only processes changed files
@@ -123,7 +124,7 @@ The repository includes `example.py` - a ready-to-use CLI tool that reads search
 <summary>example output</summary>
 
 ```
-> python _examples\example.py _examples\example_in.json
+> python _examples/example.py _examples/example_in.json
 ============================================================
 Workspace RAG Search Tool
 ============================================================
@@ -137,26 +138,28 @@ Workspace RAG Search Tool
 ⚙️  Initializing indexer...
    (This may take a while for the first run)
 
-2026-02-07 18:35:51,859 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
-2026-02-07 18:35:52,188 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index
-2026-02-07 18:35:55,161 [INFO] ◦ workspace_rag_search_tool ◦ Found 35 files to index (36 from workspace, 1 binary/non-text skipped)
-2026-02-07 18:35:55,181 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 11% (4/35 files, 629.0B/256.6KB)
-2026-02-07 18:35:55,182 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 20% (7/35 files, 9.8KB/256.6KB)
-2026-02-07 18:35:55,184 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 31% (11/35 files, 50.2KB/256.6KB)
-2026-02-07 18:35:57,445 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 40% (14/35 files, 91.6KB/256.6KB)
-2026-02-07 18:35:57,447 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 51% (18/35 files, 112.5KB/256.6KB)
-2026-02-07 18:35:57,448 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (21/35 files, 134.9KB/256.6KB)
-2026-02-07 18:35:57,450 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 71% (25/35 files, 152.4KB/256.6KB)
-2026-02-07 18:35:58,792 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 80% (28/35 files, 185.3KB/256.6KB)
-2026-02-07 18:35:58,793 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 91% (32/35 files, 207.2KB/256.6KB)
-2026-02-07 18:35:58,794 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (35/35 files, 256.6KB/256.6KB)
-2026-02-07 18:36:00,958 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
-2026-02-07 18:36:03,248 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
-2026-02-07 18:36:03,249 [INFO] ◦ workspace_rag_search_tool ◦ Query cache initialized (max_size=100, ttl=none)
-2026-02-07 18:36:03,249 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
+2026-02-07 19:01:28,639 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
+2026-02-07 19:01:28,958 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index
+2026-02-07 19:01:32,428 [INFO] ◦ workspace_rag_search_tool ◦ Found 38 files to index (39 from workspace, 1 binary/non-text skipped)
+2026-02-07 19:01:32,448 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 10% (4/38 files, 629.0B/291.3KB)
+2026-02-07 19:01:32,450 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 21% (8/38 files, 18.0KB/291.3KB)
+2026-02-07 19:01:32,451 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 31% (12/38 files, 65.3KB/291.3KB)
+2026-02-07 19:01:34,761 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 42% (16/38 files, 106.9KB/291.3KB)
+2026-02-07 19:01:34,762 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 50% (19/38 files, 121.9KB/291.3KB)
+2026-02-07 19:01:36,060 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (23/38 files, 155.5KB/291.3KB)
+2026-02-07 19:01:36,062 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 71% (27/38 files, 172.9KB/291.3KB)
+2026-02-07 19:01:36,063 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 81% (31/38 files, 216.5KB/291.3KB)
+2026-02-07 19:01:37,408 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 92% (35/38 files, 238.4KB/291.3KB)
+2026-02-07 19:01:37,410 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (38/38 files, 291.3KB/291.3KB)
+2026-02-07 19:01:38,543 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
+2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
+2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Query cache initialized (max_size=100, ttl=none)
+2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
 ✅ Index ready!
 
 🛠️  tool → → → ◦ [search_workspace] ◦ {"query": "compute file hash defintion", "limit": 3, "path_filter": "utils", "preview_window": 1500}
+2026-02-07 19:01:45,328 [INFO] ◦ mmr.mmr ◦ Initialized MMRReranker (lambda=0.60, max_file_chunks=2, file_penalty=0.10)
+2026-02-07 19:01:45,328 [INFO] ◦ mmr.mmr ◦ MMR reranking complete: selected 3 diverse results from 3 candidates
 📄 tool ← ← ← ◦ [search_workspace] ◦
 {
   "status": "success",
@@ -167,9 +170,9 @@ Workspace RAG Search Tool
     "bm25_only": 0,
     "both_methods": 3
   },
-  "results": "Found 3 relevant snippets using RRF + Reranking:
+  "results": "Found 3 relevant snippets using RRF + Reranking + MMR:
 
---- Result 1 Final: 0.85 | Rerank: #1 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.646, bm25: 5.708) ---
+--- Result 1 Final: 0.54 | Rerank: #1 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.646, bm25: 5.708) ---
 [File: utils/file_utils.py]
 rue if file can be read as text, False otherwise
     \"\"\"
@@ -212,7 +215,28 @@ def format_size(size_bytes: int) -> str:
     Returns:
         Human readable string (e.
 
---- Result 2 Final: 0.04 | Rerank: #2 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.578, bm25: 3.376) ---
+--- Result 2 Final: 0.1167 | Rerank: #2 | RRF: 0.0323 | Semantic: #3 | BM25: #1 (semantic: 0.526, bm25: 6.108) ---
+[File: utils/__init__.py]
+\"\"\"Utility modules for workspace_rag_search_tool.
+
+This package contains helper functions and utilities that are not
+directly related to RAG functionality but support file operations,
+gitignore parsing, and path handling.
+\"\"\"
+
+from .file_utils import is_text_file, compute_file_hash, format_size
+from .gitignore_utils import GitignoreParser
+from .path_utils import PathResolver
+
+__all__ = [
+    \"is_text_file\",
+    \"compute_file_hash\",
+    \"format_size\",
+    \"GitignoreParser\",
+    \"PathResolver\",
+]
+
+--- Result 3 Final: -0.4116 | Rerank: #3 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.578, bm25: 3.376) ---
 [File: utils/file_utils.py]
 \"\"\"File utility functions for workspace indexing.
 
@@ -248,51 +272,37 @@ def is_text_file(file_path: Path, sample_size: int = 8192) -> bool:
             raw = f.read(sample_size)
 
         if not raw:
-            return True
-
-
---- Result 3 Final: 0.03 | Rerank: #3 | RRF: 0.0323 | Semantic: #3 | BM25: #1 (semantic: 0.526, bm25: 6.108) ---
-[File: utils/__init__.py]
-\"\"\"Utility modules for workspace_rag_search_tool.
-
-This package contains helper functions and utilities that are not
-directly related to RAG functionality but support file operations,
-gitignore parsing, and path handling.
-\"\"\"
-
-from .file_utils import is_text_file, compute_file_hash, format_size
-from .gitignore_utils import GitignoreParser
-from .path_utils import PathResolver
-
-__all__ = [
-    \"is_text_file\",
-    \"compute_file_hash\",
-    \"format_size\",
-    \"GitignoreParser\",
-    \"PathResolver\",
-]",
+            return True",
   "query": "compute file hash defintion",
   "reranking": {
     "enabled": true,
     "model": "phi3:mini",
-    "latency_ms": 1908.33,
+    "latency_ms": 3918.75,
     "candidates": 3
+  },
+  "mmr": {
+    "enabled": true,
+    "lambda": 0.6,
+    "max_file_chunks": 2,
+    "latency_ms": 2.15,
+    "candidates": 20
   },
   "metrics": {
     "latency": {
-      "semantic_search_ms": 537.21,
-      "bm25_build_ms": 20.96,
-      "bm25_score_ms": 1.0,
+      "semantic_search_ms": 538.44,
+      "bm25_build_ms": 22.95,
+      "bm25_score_ms": 0.0,
       "rrf_fusion_ms": 0.0,
-      "rerank_ms": 1908.33,
-      "fetch_results_ms": 1.24,
-      "total_ms": 2468.74
+      "rerank_ms": 3918.75,
+      "fetch_results_ms": 1.0,
+      "total_ms": 4483.29,
+      "mmr_ms": 2.15
     },
     "diversity": {
       "unique_files": 2,
       "file_diversity_ratio": 0.667,
-      "score_range": 0.82,
-      "score_std": 0.3842,
+      "score_range": 0.9516,
+      "score_std": 0.3893,
       "method_agreement": 1.0
     },
     "coverage": {
@@ -302,7 +312,7 @@ __all__ = [
       "total_results": 3
     }
   },
-  "latency_ms": 2468.74,
+  "latency_ms": 4483.29,
   "cached": false
 }
 ```
@@ -486,12 +496,17 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     embedding_batch_size=32,
     bm25_implementation="plus",        # BM25 variant: "standard", "plus", "l", "t", "adpt"
     rerank_enabled=True,               # Enable/disable reranking
-    rerank_model="phi3:mini",         # Options: "qwen3:0.6b", "phi3:mini"
+    rerank_model="phi3:mini",          # Options: "qwen3:0.6b", "phi3:mini"
     rerank_top_k=20,                   # Number of candidates to rerank
     rerank_max_concurrent=5,           # Concurrent requests (lower = less VRAM)
+    mmr_enabled=True,                  # Enable MMR diversity reranking
+    mmr_lambda=0.6,                    # Relevance-diversity trade-off (0-1)
+    mmr_max_file_chunks=2,             # Max chunks per file (None = unlimited)
+    mmr_candidates=20,                 # Number of candidates to consider
     cache_enabled=True,                # Enable query result caching
     cache_max_size=100,                # Maximum cache entries
     cache_ttl_seconds=None,            # No expiration (cache until refresh)
+    metrics_enabled=True,              # Enable performance metrics by default
 )
 ```
 
@@ -530,6 +545,39 @@ When `metrics_enabled=True` (default in `RAG_CONFIG_DEFAULT`), detailed performa
 **Choosing a Reranking Model:**
 - `qwen3:0.6b`: Small, capable model with good quality/performance balance
 - `phi3:mini` (default): Lightweight, faster inference, good for quick reranking on limited hardware
+
+### MMR Diversity Reranking
+
+**Maximal Marginal Relevance (MMR)** reduces result duplication by explicitly trading off relevance against diversity. This is especially useful for code search where multiple chunks from the same file can dominate results.
+
+**MMR Formula:**
+```
+MMR_score = λ * relevance - (1-λ) * max_similarity_to_selected
+```
+
+Where:
+- `λ` (lambda): Trade-off parameter (0-1)
+  - `1.0` = Pure relevance (no diversity)
+  - `0.5` = Balanced (default)
+  - `0.0` = Pure diversity (ignore relevance)
+
+**How it works:**
+1. Takes candidates from RRF (or reranking if enabled)
+2. Greedily selects documents that maximize the MMR score
+3. Uses embeddings to compute semantic similarity
+4. Optionally limits chunks per file for better file-level diversity
+
+**Performance Presets:**
+- `RAG_CONFIG_DEFAULT`: MMR enabled with lambda=0.6, max 2 chunks per file
+- `RAG_CONFIG_FAST`: MMR disabled for speed
+- `RAG_CONFIG_CONSERVATIVE`: MMR enabled with lambda=0.7, max 1 chunk per file
+
+**When to use MMR:**
+- ✅ Results show multiple chunks from the same file
+- ✅ You want broader code coverage across files
+- ✅ Exploring a codebase (not looking for specific implementations)
+- ❌ Looking for the most relevant single implementation
+- ❌ Query is very specific (e.g., "function foo in bar.py")
 
 ### Reciprocal Rank Fusion (RRF)
 
