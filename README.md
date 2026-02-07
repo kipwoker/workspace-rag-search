@@ -13,6 +13,7 @@ A powerful semantic code search tool for local repositories using **RAG (Retriev
 - 🚫 **Git-Aware** - Automatically respects `.gitignore` rules
 - 🧠 **Content Detection** - Automatically skips binary files
 - ⚡ **Fast** - Persistent vector store with ChromaDB
+- 💾 **Query Caching** - LRU cache for sub-second repeated searches
 - 🎯 **Configurable** - Customizable chunking, extensions, and filters
 
 ## When to Use This Tool
@@ -98,6 +99,13 @@ print(stats)
 
 # Refresh the index after code changes
 tool.refresh_index()
+
+# Get cache statistics (hit rate, size, etc.)
+cache_stats = tool.get_cache_stats()
+print(cache_stats)
+
+# Clear the query cache if needed
+tool.clear_cache()
 ```
 
 ## CLI Example
@@ -114,7 +122,7 @@ The repository includes `example.py` - a ready-to-use CLI tool that reads search
 <summary>example output</summary>
 
 ```
-> python _examples/example.py _examples/example_in.json
+> python _examples\example.py _examples\example_in.json
 ============================================================
 Workspace RAG Search Tool
 ============================================================
@@ -128,22 +136,23 @@ Workspace RAG Search Tool
 ⚙️  Initializing indexer...
    (This may take a while for the first run)
 
-2026-02-07 17:13:45,399 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
-2026-02-07 17:13:45,723 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index
-2026-02-07 17:13:48,864 [INFO] ◦ workspace_rag_search_tool ◦ Found 32 files to index (33 from workspace, 1 binary/non-text skipped)
-2026-02-07 17:13:48,884 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 12% (4/32 files, 622.0B/220.1KB)
-2026-02-07 17:13:48,886 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 21% (7/32 files, 8.8KB/220.1KB)
-2026-02-07 17:13:48,887 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 31% (10/32 files, 34.6KB/220.1KB)
-2026-02-07 17:13:48,889 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 40% (13/32 files, 77.1KB/220.1KB)
-2026-02-07 17:13:50,612 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 50% (16/32 files, 96.2KB/220.1KB)
-2026-02-07 17:13:50,612 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 62% (20/32 files, 117.4KB/220.1KB)
-2026-02-07 17:13:50,612 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 71% (23/32 files, 133.6KB/220.1KB)
-2026-02-07 17:13:51,956 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 81% (26/32 files, 168.3KB/220.1KB)
-2026-02-07 17:13:51,956 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 90% (29/32 files, 179.3KB/220.1KB)
-2026-02-07 17:13:51,956 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (32/32 files, 220.1KB/220.1KB)
-2026-02-07 17:13:53,202 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
-2026-02-07 17:13:55,474 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
-2026-02-07 17:13:55,474 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
+2026-02-07 18:20:27,763 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
+2026-02-07 18:20:28,034 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index
+2026-02-07 18:20:30,443 [INFO] ◦ workspace_rag_search_tool ◦ Found 30 files to index (31 from workspace, 1 binary/non-text skipped)
+2026-02-07 18:20:30,468 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 10% (3/30 files, 13.0KB/248.8KB)
+2026-02-07 18:20:30,469 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 20% (6/30 files, 46.8KB/248.8KB)
+2026-02-07 18:20:30,470 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 30% (9/30 files, 88.2KB/248.8KB)
+2026-02-07 18:20:32,074 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 40% (12/30 files, 103.0KB/248.8KB)
+2026-02-07 18:20:32,075 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 50% (15/30 files, 131.0KB/248.8KB)
+2026-02-07 18:20:32,077 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (18/30 files, 145.5KB/248.8KB)
+2026-02-07 18:20:32,079 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 70% (21/30 files, 159.5KB/248.8KB)
+2026-02-07 18:20:33,384 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 80% (24/30 files, 192.3KB/248.8KB)
+2026-02-07 18:20:33,386 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 90% (27/30 files, 203.3KB/248.8KB)
+2026-02-07 18:20:33,387 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (30/30 files, 248.8KB/248.8KB)
+2026-02-07 18:20:35,496 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
+2026-02-07 18:20:37,776 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
+2026-02-07 18:20:37,776 [INFO] ◦ workspace_rag_search_tool ◦ Query cache initialized (max_size=100, ttl=none)
+2026-02-07 18:20:37,776 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
 ✅ Index ready!
 
 🛠️  tool → → → ◦ [search_workspace] ◦ {"query": "compute file hash defintion", "limit": 3, "path_filter": "utils", "preview_window": 1500}
@@ -159,7 +168,7 @@ Workspace RAG Search Tool
   },
   "results": "Found 3 relevant snippets using RRF + Reranking:
 
---- Result 1 Final: 0.85 | Rerank: #1 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.646, bm25: 5.708) ---
+--- Result 1 Final: 0.65 | Rerank: #1 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.646, bm25: 5.708) ---
 [File: utils/file_utils.py]
 rue if file can be read as text, False otherwise
     \"\"\"
@@ -202,7 +211,7 @@ def format_size(size_bytes: int) -> str:
     Returns:
         Human readable string (e.
 
---- Result 2 Final: 0.85 | Rerank: #2 | RRF: 0.0323 | Semantic: #3 | BM25: #1 (semantic: 0.526, bm25: 6.108) ---
+--- Result 2 Final: 0.6 | Rerank: #2 | RRF: 0.0323 | Semantic: #3 | BM25: #1 (semantic: 0.526, bm25: 6.108) ---
 [File: utils/__init__.py]
 \"\"\"Utility modules for workspace_rag_search_tool.
 
@@ -223,7 +232,7 @@ __all__ = [
     \"PathResolver\",
 ]
 
---- Result 3 Final: 0.03 | Rerank: #3 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.578, bm25: 3.376) ---
+--- Result 3 Final: 0.04 | Rerank: #3 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.578, bm25: 3.376) ---
 [File: utils/file_utils.py]
 \"\"\"File utility functions for workspace indexing.
 
@@ -264,9 +273,11 @@ def is_text_file(file_path: Path, sample_size: int = 8192) -> bool:
   "reranking": {
     "enabled": true,
     "model": "phi3:mini",
-    "latency_ms": 2136.0,
+    "latency_ms": 891.01,
     "candidates": 3
-  }
+  },
+  "latency_ms": 1443.9,
+  "cached": false
 }
 ```
 </details>
@@ -299,6 +310,9 @@ custom_config = RAGConfig(
     rerank_model="phi3:mini",
     rerank_top_k=20,
     rerank_max_concurrent=5,
+    cache_enabled=True,           # Enable query result caching
+    cache_max_size=100,           # Maximum cache entries
+    cache_ttl_seconds=300,        # TTL in seconds (None = no expiration)
 )
 ```
 
@@ -376,6 +390,35 @@ The `search_workspace()` method returns a JSON string with the following structu
 > [!WARNING]
 > The `preview_window` parameter limits how many characters are displayed from the start of each result. If your search term appears later in the chunk, it may not be visible in the truncated preview. Set `preview_window=None` (default) to display the full chunk content and ensure matches are always visible.
 
+### Query Caching
+
+The tool includes an **LRU (Least Recently Used) cache** for search query results, providing sub-second responses for repeated searches.
+
+**How it works:**
+- Cache keys are based on query parameters (query string, limit, path_filter, rrf_k, rerank_enabled)
+- Results are cached after the first search
+- Subsequent identical queries return instantly from cache
+- Cache is automatically cleared when the index is refreshed
+
+**Cache Options:**
+- `cache_enabled`: Toggle caching on/off (default: `True`)
+- `cache_max_size`: Maximum number of cached queries (default: `100`)
+- `cache_ttl_seconds`: Time-to-live for entries. `None` means no expiration (default: `None`)
+
+**Managing the Cache:**
+```python
+# Get cache statistics
+stats = tool.get_cache_stats()
+print(stats)
+# Output: {"status": "success", "cache": {"hits": 42, "misses": 10, "hit_rate": 0.8077, ...}}
+
+# Clear all cached queries
+tool.clear_cache()
+
+# Clear specific queries matching a pattern
+tool.clear_cache("authentication")
+```
+
 ## How It Works
 
 1. **Indexing Phase:**
@@ -420,13 +463,16 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     rerank_model="phi3:mini",         # Options: "qwen3:0.6b", "phi3:mini"
     rerank_top_k=20,                   # Number of candidates to rerank
     rerank_max_concurrent=5,           # Concurrent requests (lower = less VRAM)
+    cache_enabled=True,                # Enable query result caching
+    cache_max_size=100,                # Maximum cache entries
+    cache_ttl_seconds=None,            # No expiration (cache until refresh)
 )
 ```
 
 **Performance Presets:**
-- `RAG_CONFIG_DEFAULT`: Reranking enabled with `phi3:mini`
-- `RAG_CONFIG_FAST`: Reranking disabled for fastest search
-- `RAG_CONFIG_CONSERVATIVE`: Uses lower concurrency and reranks fewer documents for limited VRAM
+- `RAG_CONFIG_DEFAULT`: Reranking and caching enabled
+- `RAG_CONFIG_FAST`: Reranking disabled, caching with 60s TTL
+- `RAG_CONFIG_CONSERVATIVE`: Lower concurrency, larger cache with 600s TTL
 
 **Choosing a Reranking Model:**
 - `qwen3:0.6b`: Small, capable model with good quality/performance balance

@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -9,6 +10,7 @@ from chromadb.api.models.Collection import Collection
 
 from async_ollama_embedding_function import AsyncOllamaEmbeddingFunction
 from bm25 import create_bm25_index, BM25IndexType
+from cache import QueryCache
 from ollama_config import OLLAMA_BASE_URL, RAG_CONFIG_DEFAULT, RAGConfig
 from reranker import CrossEncoderReranker
 from rrf import ReciprocalRankFusion
@@ -36,6 +38,7 @@ class WorkspaceRagSearchTool:
         - Content-based file detection (no extension hardcoding)
         - Hybrid search with RRF (combines semantic + BM25 rankings)
         - Cross-encoder reranking for +25-40% relevance improvement
+        - Query result caching for sub-second repeated searches
         - Path-based filtering for search results
         - Configurable chunking with overlap for better context
         - Code-optimized BM25 with camelCase/snake_case tokenization
@@ -82,6 +85,7 @@ class WorkspaceRagSearchTool:
         self._gitignore_parser: Optional[GitignoreParser] = None
         self._path_resolver: Optional[PathResolver] = None
         self._reranker: Optional[CrossEncoderReranker] = None
+        self._cache: Optional[QueryCache] = None
         
         self._validate_config()
         
@@ -100,7 +104,24 @@ class WorkspaceRagSearchTool:
         
         self._get_or_create_collection()
         self._initialize_reranker()
+        self._initialize_cache()
         logger.info("Workspace index ready!")
+
+    def _initialize_cache(self) -> None:
+        """Initialize the query cache based on configuration."""
+        self._cache = QueryCache(
+            max_size=self.rag_config.cache_max_size,
+            ttl_seconds=self.rag_config.cache_ttl_seconds,
+            enabled=self.rag_config.cache_enabled
+        )
+        if self.rag_config.cache_enabled:
+            logger.info(
+                "Query cache initialized (max_size=%d, ttl=%s)",
+                self.rag_config.cache_max_size,
+                self.rag_config.cache_ttl_seconds or "none"
+            )
+        else:
+            logger.info("Query cache is disabled")
 
     def _validate_config(self) -> None:
         """Validate RAG configuration parameters.
@@ -556,6 +577,27 @@ class WorkspaceRagSearchTool:
         
         rerank_start_time = None
         rerank_latency_ms = None
+        search_start_time = time.time()
+        
+        # Check cache first
+        cached_result = None
+        if self._cache:
+            cached_result = self._cache.get(
+                query=query,
+                limit=limit,
+                path_filter=path_filter,
+                rrf_k=rrf_k,
+                rerank_enabled=self.rag_config.rerank_enabled and self._reranker is not None
+            )
+            if cached_result:
+                # Parse and add cache metadata
+                try:
+                    response = json.loads(cached_result)
+                    response["cached"] = True
+                    response["cache_latency_ms"] = round((time.time() - search_start_time) * 1000, 2)
+                    return json.dumps(response, indent=2)
+                except json.JSONDecodeError:
+                    logger.warning("Cached result is invalid JSON, proceeding with search")
         
         try:
             # Phase 1: Independent Retrieval
@@ -636,7 +678,6 @@ class WorkspaceRagSearchTool:
             # Rerank top-k RRF results for improved relevance
             reranked_results = fused_results
             if self._reranker and len(fused_results) > 0:
-                import time
                 rerank_start_time = time.time()
                 
                 # Get documents for reranking
@@ -790,7 +831,24 @@ class WorkspaceRagSearchTool:
             else:
                 response["reranking"] = {"enabled": False}
             
-            return json.dumps(response, indent=2)
+            # Calculate total latency
+            total_latency_ms = round((time.time() - search_start_time) * 1000, 2)
+            response["latency_ms"] = total_latency_ms
+            response["cached"] = False
+            
+            # Store in cache
+            result_json = json.dumps(response, indent=2)
+            if self._cache and response["status"] == "success":
+                self._cache.set(
+                    query=query,
+                    limit=limit,
+                    path_filter=path_filter,
+                    rrf_k=rrf_k,
+                    rerank_enabled=self.rag_config.rerank_enabled and self._reranker is not None,
+                    result=result_json
+                )
+            
+            return result_json
             
         except Exception as e:
             logger.exception("Search failed for query: %s", query)
@@ -845,6 +903,8 @@ class WorkspaceRagSearchTool:
     def refresh_index(self) -> str:
         """Force a refresh of the index by re-scanning all files.
         
+        Also clears the query cache since results may have changed.
+        
         Returns:
             JSON string with refresh status
         """
@@ -853,9 +913,16 @@ class WorkspaceRagSearchTool:
                 if self._gitignore_parser:
                     self._gitignore_parser.refresh()
                 self._index_files(self._collection)
+                
+                # Clear cache after index refresh
+                cache_cleared = 0
+                if self._cache:
+                    cache_cleared = self._cache.invalidate()
+                
                 return json.dumps({
                     "status": "success",
-                    "message": "Index refreshed successfully"
+                    "message": "Index refreshed successfully",
+                    "cache_cleared": cache_cleared
                 })
             else:
                 return json.dumps({
@@ -867,5 +934,62 @@ class WorkspaceRagSearchTool:
             return json.dumps({
                 "status": "error",
                 "reason": "Refresh operation failed",
+                "exception": str(e)
+            })
+
+    def get_cache_stats(self) -> str:
+        """Get statistics about the query cache.
+        
+        Returns:
+            JSON string with cache statistics
+        """
+        if not self._cache:
+            return json.dumps({
+                "status": "error",
+                "reason": "Cache not initialized"
+            })
+        
+        try:
+            stats = self._cache.get_stats()
+            return json.dumps({
+                "status": "success",
+                "cache": stats.to_dict()
+            }, indent=2)
+        except Exception as e:
+            logger.exception("Failed to get cache stats")
+            return json.dumps({
+                "status": "error",
+                "reason": "Failed to retrieve cache statistics",
+                "exception": str(e)
+            })
+
+    def clear_cache(self, query_pattern: Optional[str] = None) -> str:
+        """Clear the query cache.
+        
+        Args:
+            query_pattern: Optional pattern to clear specific queries.
+                          If None, clears all cached queries.
+        
+        Returns:
+            JSON string with clear status
+        """
+        if not self._cache:
+            return json.dumps({
+                "status": "error",
+                "reason": "Cache not initialized"
+            })
+        
+        try:
+            cleared_count = self._cache.invalidate(query_pattern)
+            return json.dumps({
+                "status": "success",
+                "message": f"Cleared {cleared_count} cache entries",
+                "pattern": query_pattern
+            })
+        except Exception as e:
+            logger.exception("Failed to clear cache")
+            return json.dumps({
+                "status": "error",
+                "reason": "Failed to clear cache",
                 "exception": str(e)
             })

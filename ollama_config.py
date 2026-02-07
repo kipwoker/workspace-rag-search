@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Optional
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 
@@ -46,6 +46,9 @@ class RAGConfig:
             Options: "phi3:mini", "qwen3:0.6b"
         rerank_top_k: Number of documents to rerank (more = better quality but slower)
         rerank_max_concurrent: Concurrent reranking requests (lower = less VRAM)
+        cache_enabled: Whether to enable query result caching
+        cache_max_size: Maximum number of cached query results
+        cache_ttl_seconds: Cache entry time-to-live in seconds (None = no expiration)
     
     Example:
         >>> config = RAGConfig(
@@ -60,7 +63,10 @@ class RAGConfig:
         ...     rerank_enabled=True,
         ...     rerank_model="qwen3:0.6b",
         ...     rerank_top_k=20,
-        ...     rerank_max_concurrent=5
+        ...     rerank_max_concurrent=5,
+        ...     cache_enabled=True,
+        ...     cache_max_size=100,
+        ...     cache_ttl_seconds=300
         ... )
     """
     vector_store_path: str
@@ -75,6 +81,9 @@ class RAGConfig:
     rerank_model: RerankModel = field(default=RERANK_MODEL)
     rerank_top_k: int = field(default=20)
     rerank_max_concurrent: int = field(default=5)
+    cache_enabled: bool = field(default=True)
+    cache_max_size: int = field(default=100)
+    cache_ttl_seconds: Optional[int] = field(default=None)
 
 RAG_CONFIG_DEFAULT = RAGConfig(
     vector_store_path="./.vectorstore",
@@ -89,6 +98,9 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=20,             # Rerank top 20 RRF results
     rerank_max_concurrent=5,     # 5 concurrent reranking requests
+    cache_enabled=True,          # Enable query caching by default
+    cache_max_size=100,          # Cache up to 100 queries
+    cache_ttl_seconds=None,      # No expiration (cache until index refresh)
 )
 
 
@@ -106,6 +118,9 @@ RAG_CONFIG_FAST = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=20,
     rerank_max_concurrent=5,
+    cache_enabled=True,          # Enable caching for repeated queries
+    cache_max_size=50,           # Smaller cache for memory efficiency
+    cache_ttl_seconds=60,        # 1 minute TTL for fast-changing code
 )
 
 RAG_CONFIG_CONSERVATIVE = RAGConfig(
@@ -121,4 +136,7 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     rerank_model=RERANK_MODEL,
     rerank_top_k=10,             # Rerank fewer documents
     rerank_max_concurrent=2,     # Lower VRAM usage
+    cache_enabled=True,          # Enable caching
+    cache_max_size=200,          # Larger cache since we're conservative on speed
+    cache_ttl_seconds=600,       # 10 minute TTL
 )
