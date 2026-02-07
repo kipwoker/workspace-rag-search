@@ -71,7 +71,7 @@ class TestHyDEQueryExpander:
         expander = HyDEQueryExpander()
         assert "{query}" in expander.prompt_template
     
-    @patch.object(HyDEQueryExpander, "_generate_sync")
+    @patch.object(HyDEQueryExpander, "_generate_async")
     def test_expand_query_success(self, mock_generate):
         """Test successful query expansion."""
         mock_generate.return_value = "Generated hypothetical document"
@@ -86,7 +86,7 @@ class TestHyDEQueryExpander:
         assert result.latency_ms > 0
         mock_generate.assert_called_once_with("test query")
     
-    @patch.object(HyDEQueryExpander, "_generate_sync")
+    @patch.object(HyDEQueryExpander, "_generate_async")
     def test_expand_query_empty_response(self, mock_generate):
         """Test query expansion with empty response."""
         mock_generate.return_value = ""
@@ -106,7 +106,7 @@ class TestHyDEQueryExpander:
         with pytest.raises(ValueError, match="query cannot be empty"):
             expander.expand_query("   ")
     
-    @patch.object(HyDEQueryExpander, "_generate_multi_sync")
+    @patch.object(HyDEQueryExpander, "_generate_multi_async")
     def test_expand_query_multi_success(self, mock_generate_multi):
         """Test successful multi-hypothesis expansion."""
         mock_generate_multi.return_value = [

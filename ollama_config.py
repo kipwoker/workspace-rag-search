@@ -103,6 +103,12 @@ class RAGConfig:
                                           Format: "Query: X\nHyDE: Y"
                              - "skip": Skip reranking when HyDE is enabled.
                                       Faster but loses reranking benefits.
+        hnsw_m: HNSW M parameter - maximum number of neighbors per layer.
+                Higher values = better recall, more memory usage.
+                Default: 16. Recommended range: 8-64.
+                For large repos (>100k docs), increase to 32-64.
+        hnsw_space: Distance metric for HNSW index. Default: "cosine".
+                   Options: "cosine", "l2", "ip" (inner product).
     
     Example:
         >>> config = RAGConfig(
@@ -125,7 +131,8 @@ class RAGConfig:
         ...     cache_enabled=True,
         ...     cache_max_size=100,
         ...     cache_ttl_seconds=300,
-        ...     metrics_enabled=True
+        ...     metrics_enabled=True,
+        ...     hnsw_m=16
         ... )
     """
     vector_store_path: str
@@ -154,6 +161,8 @@ class RAGConfig:
     hyde_max_tokens: int = field(default=300)
     hyde_temperature: float = field(default=0.5)
     hyde_rerank_strategy: HyDERerankStrategy = field(default=HYDE_RERANK_STRATEGY)
+    hnsw_m: int = field(default=16)
+    hnsw_space: str = field(default="cosine")
 
 RAG_CONFIG_DEFAULT = RAGConfig(
     vector_store_path="./.vectorstore",
@@ -182,6 +191,8 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     hyde_max_tokens=600,
     hyde_temperature=0.3,
     hyde_rerank_strategy="hyde",  # Use HyDE document for reranking (recommended)
+    hnsw_m=16,                   # Default HNSW M parameter
+    hnsw_space="cosine",         # Cosine similarity
 )
 
 
@@ -206,6 +217,8 @@ RAG_CONFIG_FAST = RAGConfig(
     metrics_enabled=False,       # Disable metrics for minimal overhead
     hyde_enabled=False,          # Disable HyDE for speed
     hyde_rerank_strategy="skip", # Not used since HyDE is disabled
+    hnsw_m=8,                    # Lower M for faster search, less memory
+    hnsw_space="cosine",
 )
 
 RAG_CONFIG_CONSERVATIVE = RAGConfig(
@@ -235,4 +248,6 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     hyde_max_tokens=300,
     hyde_temperature=0.3,
     hyde_rerank_strategy="hyde", # Use HyDE document for reranking
+    hnsw_m=32,                   # Higher M for better recall
+    hnsw_space="cosine",
 )

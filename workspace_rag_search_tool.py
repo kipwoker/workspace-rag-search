@@ -300,7 +300,8 @@ class WorkspaceRagSearchTool:
         """Get existing collection or create a new one with incremental indexing.
         
         Uses AsyncOllamaEmbeddingFunction for faster concurrent embedding
-        processing during indexing.
+        processing during indexing. Configures HNSW parameters for optimized
+        vector search performance.
         
         Returns:
             ChromaDB collection instance
@@ -330,12 +331,23 @@ class WorkspaceRagSearchTool:
 
             collection._embedding_function = ollama_ef
         else:
+            # Build HNSW configuration from rag_config
+            hnsw_metadata = {
+                "hnsw:space": self.rag_config.hnsw_space,
+                "hnsw:M": self.rag_config.hnsw_m,
+            }
+            
             collection = client.create_collection(
                 name=collection_name,
                 embedding_function=ollama_ef,
-                metadata={"hnsw:space": "cosine"}
+                metadata=hnsw_metadata
             )
-            logger.info("Created new collection: %s", collection_name)
+            logger.info(
+                "Created new collection: %s (HNSW: M=%d, space=%s)",
+                collection_name,
+                self.rag_config.hnsw_m,
+                self.rag_config.hnsw_space
+            )
         
         self._index_files(collection)
         

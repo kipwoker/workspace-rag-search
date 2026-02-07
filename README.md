@@ -10,6 +10,7 @@ A powerful semantic code search tool for local repositories using **RAG (Retriev
 - 🎭 **MMR Diversity Reranking** - Maximal Marginal Relevance reduces duplicate results from the same files
 - 🧠 **HyDE Query Expansion** - Hypothetical Document Embeddings for better retrieval on vague queries
 - 🧮 **Code-Optimized BM25** - Custom tokenization handling snake_case, camelCase, and kebab-case identifiers
+- 🔧 **HNSW Index Tuning** - Configurable vector search parameters for large repositories
 - 📊 **Performance Metrics** - Detailed latency, diversity, and coverage statistics for observability
 - 📁 **Smart Indexing** - Incremental updates, only processes changed files
 - 🦙 **Local Embeddings** - Uses Ollama for 100% local, private embeddings
@@ -139,28 +140,30 @@ Workspace RAG Search Tool
 ⚙️  Initializing indexer...
    (This may take a while for the first run)
 
-2026-02-07 19:01:28,639 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
-2026-02-07 19:01:28,958 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index
-2026-02-07 19:01:32,428 [INFO] ◦ workspace_rag_search_tool ◦ Found 38 files to index (39 from workspace, 1 binary/non-text skipped)
-2026-02-07 19:01:32,448 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 10% (4/38 files, 629.0B/291.3KB)
-2026-02-07 19:01:32,450 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 21% (8/38 files, 18.0KB/291.3KB)
-2026-02-07 19:01:32,451 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 31% (12/38 files, 65.3KB/291.3KB)
-2026-02-07 19:01:34,761 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 42% (16/38 files, 106.9KB/291.3KB)
-2026-02-07 19:01:34,762 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 50% (19/38 files, 121.9KB/291.3KB)
-2026-02-07 19:01:36,060 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (23/38 files, 155.5KB/291.3KB)
-2026-02-07 19:01:36,062 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 71% (27/38 files, 172.9KB/291.3KB)
-2026-02-07 19:01:36,063 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 81% (31/38 files, 216.5KB/291.3KB)
-2026-02-07 19:01:37,408 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 92% (35/38 files, 238.4KB/291.3KB)
-2026-02-07 19:01:37,410 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (38/38 files, 291.3KB/291.3KB)
-2026-02-07 19:01:38,543 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
-2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
-2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Query cache initialized (max_size=100, ttl=none)
-2026-02-07 19:01:40,845 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
+2026-02-07 20:34:40,655 [INFO] ◦ workspace_rag_search_tool ◦ Initializing workspace search index for: .../workspace-rag-search
+2026-02-07 20:34:40,930 [INFO] ◦ workspace_rag_search_tool ◦ Created new collection: workspace_code_index (HNSW: M=16, space=cosine)
+2026-02-07 20:34:43,588 [INFO] ◦ workspace_rag_search_tool ◦ Found 41 files to index (42 from workspace, 1 binary/non-text skipped)
+2026-02-07 20:34:43,611 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 12% (5/41 files, 888.0B/335.4KB)
+2026-02-07 20:34:43,613 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 21% (9/41 files, 23.7KB/335.4KB)
+2026-02-07 20:34:43,614 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 31% (13/41 files, 81.4KB/335.4KB)
+2026-02-07 20:34:45,926 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 41% (17/41 files, 110.1KB/335.4KB)
+2026-02-07 20:34:45,928 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 51% (21/41 files, 142.2KB/335.4KB)
+2026-02-07 20:34:47,191 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (25/41 files, 182.5KB/335.4KB)
+2026-02-07 20:34:47,193 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 70% (29/41 files, 199.9KB/335.4KB)
+2026-02-07 20:34:48,536 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 80% (33/41 files, 241.0KB/335.4KB)
+2026-02-07 20:34:48,538 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 90% (37/41 files, 273.6KB/335.4KB)
+2026-02-07 20:34:48,540 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (41/41 files, 335.4KB/335.4KB)
+2026-02-07 20:34:50,770 [INFO] ◦ reranker.reranker ◦ Initialized CrossEncoderReranker with model=phi3:mini, max_concurrent=5
+2026-02-07 20:34:53,043 [INFO] ◦ workspace_rag_search_tool ◦ Reranker initialized with model: phi3:mini
+2026-02-07 20:34:53,043 [INFO] ◦ workspace_rag_search_tool ◦ Query cache initialized (max_size=100, ttl=none)
+2026-02-07 20:34:53,044 [INFO] ◦ hyde.hyde ◦ Initialized HyDEQueryExpander with model=qwen3:0.6b, max_tokens=600, temp=0.30
+2026-02-07 20:34:55,325 [INFO] ◦ workspace_rag_search_tool ◦ HyDE query expander initialized with model: qwen3:0.6b
+2026-02-07 20:34:55,326 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
 ✅ Index ready!
 
 🛠️  tool → → → ◦ [search_workspace] ◦ {"query": "compute file hash defintion", "limit": 3, "path_filter": "utils", "preview_window": 1500}
-2026-02-07 19:01:45,328 [INFO] ◦ mmr.mmr ◦ Initialized MMRReranker (lambda=0.60, max_file_chunks=2, file_penalty=0.10)
-2026-02-07 19:01:45,328 [INFO] ◦ mmr.mmr ◦ MMR reranking complete: selected 3 diverse results from 3 candidates
+2026-02-07 20:35:05,684 [INFO] ◦ mmr.mmr ◦ Initialized MMRReranker (lambda=0.60, max_file_chunks=2, file_penalty=0.10)
+2026-02-07 20:35:05,684 [INFO] ◦ mmr.mmr ◦ MMR reranking complete: selected 3 diverse results from 3 candidates
 📄 tool ← ← ← ◦ [search_workspace] ◦
 {
   "status": "success",
@@ -173,7 +176,46 @@ Workspace RAG Search Tool
   },
   "results": "Found 3 relevant snippets using RRF + Reranking + MMR:
 
---- Result 1 Final: 0.54 | Rerank: #1 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.646, bm25: 5.708) ---
+--- Result 1 Final: 0.51 | Rerank: #1 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.704, bm25: 3.376) ---
+[File: utils/file_utils.py]
+\"\"\"File utility functions for workspace indexing.
+
+This module provides helper functions for file operations including
+text detection, hashing, and size formatting.
+\"\"\"
+
+import hashlib
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def is_text_file(file_path: Path, sample_size: int = 8192) -> bool:
+    \"\"\"Check if a file is text-readable by attempting to decode it as UTF-8.
+
+    This is more reliable than extension-based filtering as it handles:
+    - Files without extensions
+    - Files with wrong extensions
+    - Binary files that happen to have text extensions
+    - Various text encodings
+
+    Args:
+        file_path: Path to the file to check
+        sample_size: Number of bytes to read for detection (default 8KB)
+
+    Returns:
+        True if file can be read as text, False otherwise
+    \"\"\"
+    try:
+        with open(file_path, \"rb\") as f:
+            raw = f.read(sample_size)
+
+        if not raw:
+            return True
+
+
+--- Result 2 Final: 0.0024 | Rerank: #2 | RRF: 0.0325 | Semantic: #1 | BM25: #2 (semantic: 0.791, bm25: 5.708) ---
 [File: utils/file_utils.py]
 rue if file can be read as text, False otherwise
     \"\"\"
@@ -216,7 +258,7 @@ def format_size(size_bytes: int) -> str:
     Returns:
         Human readable string (e.
 
---- Result 2 Final: 0.1167 | Rerank: #2 | RRF: 0.0323 | Semantic: #3 | BM25: #1 (semantic: 0.526, bm25: 6.108) ---
+--- Result 3 Final: -0.1647 | Rerank: #3 | RRF: 0.0313 | Semantic: #7 | BM25: #1 (semantic: 0.642, bm25: 6.108) ---
 [File: utils/__init__.py]
 \"\"\"Utility modules for workspace_rag_search_tool.
 
@@ -235,75 +277,52 @@ __all__ = [
     \"format_size\",
     \"GitignoreParser\",
     \"PathResolver\",
-]
-
---- Result 3 Final: -0.4116 | Rerank: #3 | RRF: 0.032 | Semantic: #2 | BM25: #3 (semantic: 0.578, bm25: 3.376) ---
-[File: utils/file_utils.py]
-\"\"\"File utility functions for workspace indexing.
-
-This module provides helper functions for file operations including
-text detection, hashing, and size formatting.
-\"\"\"
-
-import hashlib
-import logging
-from pathlib import Path
-
-logger = logging.getLogger(__name__)
-
-
-def is_text_file(file_path: Path, sample_size: int = 8192) -> bool:
-    \"\"\"Check if a file is text-readable by attempting to decode it as UTF-8.
-
-    This is more reliable than extension-based filtering as it handles:
-    - Files without extensions
-    - Files with wrong extensions
-    - Binary files that happen to have text extensions
-    - Various text encodings
-
-    Args:
-        file_path: Path to the file to check
-        sample_size: Number of bytes to read for detection (default 8KB)
-
-    Returns:
-        True if file can be read as text, False otherwise
-    \"\"\"
-    try:
-        with open(file_path, \"rb\") as f:
-            raw = f.read(sample_size)
-
-        if not raw:
-            return True",
+]",
   "query": "compute file hash defintion",
   "reranking": {
     "enabled": true,
     "model": "phi3:mini",
-    "latency_ms": 3918.75,
+    "latency_ms": 4745.48,
     "candidates": 3
   },
   "mmr": {
     "enabled": true,
     "lambda": 0.6,
     "max_file_chunks": 2,
-    "latency_ms": 2.15,
+    "latency_ms": 1.66,
     "candidates": 20
+  },
+  "hyde": {
+    "enabled": true,
+    "model": "qwen3:0.6b",
+    "num_hypotheses": 2,
+    "latency_ms": 5057.49,
+    "hypothetical_document": "```python
+def compute_file_hash(file_path, algorithm='sha256'):
+    \"\"\"
+    Compute the file hash using a specified algorithm.
+
+    Parameters:
+    file_path (str): Path to the file to hash.
+    algor..."
   },
   "metrics": {
     "latency": {
-      "semantic_search_ms": 538.44,
-      "bm25_build_ms": 22.95,
+      "semantic_search_ms": 524.79,
+      "bm25_build_ms": 27.21,
       "bm25_score_ms": 0.0,
       "rrf_fusion_ms": 0.0,
-      "rerank_ms": 3918.75,
-      "fetch_results_ms": 1.0,
-      "total_ms": 4483.29,
-      "mmr_ms": 2.15
+      "rerank_ms": 4745.48,
+      "fetch_results_ms": 0.84,
+      "total_ms": 10358.48,
+      "hyde_ms": 5057.49,
+      "mmr_ms": 1.66
     },
     "diversity": {
       "unique_files": 2,
       "file_diversity_ratio": 0.667,
-      "score_range": 0.9516,
-      "score_std": 0.3893,
+      "score_range": 0.6747,
+      "score_std": 0.2869,
       "method_agreement": 1.0
     },
     "coverage": {
@@ -313,7 +332,7 @@ def is_text_file(file_path: Path, sample_size: int = 8192) -> bool:
       "total_results": 3
     }
   },
-  "latency_ms": 4483.29,
+  "latency_ms": 10358.48,
   "cached": false
 }
 ```
@@ -589,6 +608,30 @@ When HyDE is enabled, you can choose how the reranker uses the generated documen
 - ❌ Query contains exact function/class names
 - ❌ Very specific technical queries ("MD5 implementation in file_utils.py")
 
+### HNSW Index Tuning
+
+**Hierarchical Navigable Small World (HNSW)** is the approximate nearest neighbor algorithm used by ChromaDB for fast vector search. Tuning these parameters can significantly improve search quality and performance, especially for large repositories.
+
+**HNSW Parameters:**
+
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| `hnsw_m` | 16 | 8-64 | Maximum neighbors per layer. Higher = better recall, more memory. |
+| `hnsw_space` | "cosine" | "cosine", "l2", "ip" | Distance metric for vector comparison. |
+
+**Performance Presets:**
+- `RAG_CONFIG_DEFAULT`: M=16 (balanced)
+- `RAG_CONFIG_FAST`: M=8 (lower memory, faster)
+- `RAG_CONFIG_CONSERVATIVE`: M=32 (better quality)
+
+**When to tune HNSW:**
+- ✅ Large repositories with 100k+ documents (increase M and ef_construction)
+- ✅ Search quality is more important than speed (increase ef_search)
+- ✅ Memory is constrained (decrease M)
+- ✅ Indexing speed is critical (decrease ef_construction)
+
+**Note:** HNSW parameters are set at collection creation time. To apply new parameters to an existing index, use `force_reindex=True` when initializing the tool.
+
 ### Reciprocal Rank Fusion (RRF)
 
 RRF is a proven method for combining multiple ranked result lists without requiring score normalization:
@@ -617,27 +660,3 @@ For very large codebases, you may want to:
 - Adjust `chunk_size` and `chunk_overlap` for your use case
 - Use `include_extensions` to limit indexed file types
 - Adjust `max_concurrent_requests` and `embedding_batch_size` to index faster
-
-### Performance observations
-
-First cold run might take some time, but does not look drastical on medium hardware/repository:
-- Intel i9-11900K / 32 Gb RAM / 3070Ti
-- Indexes 882 files (2.1MB total) for 44 sec
-
-The Ollama model itself is the bottleneck, not Python or HTTP overhead.
-
-```
-2026-02-06 20:10:06,814 [INFO] ◦ workspace_rag_search_tool ◦ Found 882 files to index (1061 from workspace, 179 binary/non-text skipped)
-2026-02-06 20:10:10,007 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 10% (89/882 files, 168.2KB/2.1MB)
-2026-02-06 20:10:14,666 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 20% (177/882 files, 392.3KB/2.1MB)
-2026-02-06 20:10:22,651 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 30% (265/882 files, 753.2KB/2.1MB)
-2026-02-06 20:10:30,602 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 40% (353/882 files, 1.2MB/2.1MB)
-2026-02-06 20:10:33,297 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 50% (441/882 files, 1.3MB/2.1MB)
-2026-02-06 20:10:34,590 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 60% (530/882 files, 1.4MB/2.1MB)
-2026-02-06 20:10:38,650 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 70% (618/882 files, 1.5MB/2.1MB)
-2026-02-06 20:10:39,890 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 80% (706/882 files, 1.6MB/2.1MB)
-2026-02-06 20:10:43,835 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 90% (794/882 files, 1.8MB/2.1MB)
-2026-02-06 20:10:49,135 [INFO] ◦ workspace_rag_search_tool ◦ Indexing progress: 100% (882/882 files, 2.1MB/2.1MB)
-2026-02-06 20:10:50,054 [INFO] ◦ workspace_rag_search_tool ◦ Indexed 3152 new chunks (0 files skipped, 0 stale removed)
-2026-02-06 20:10:50,055 [INFO] ◦ workspace_rag_search_tool ◦ Workspace index ready!
-```
