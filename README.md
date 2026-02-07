@@ -55,7 +55,16 @@ ollama pull phi3:mini
 
 ## Installation
 
+### From PyPI
+
+```bash
+pip install workspace-rag-tool
 ```
+
+### From Source
+
+```
+git clone https://github.com/kipwoker/workspace-rag-search.git
 cd workspace-rag-search
 
 python -m venv .venv
