@@ -302,6 +302,7 @@ On a scale of 0 to 100, how relevant is this document to the query? Provide only
         
         The model should output a number between 0 and 100.
         We extract the first number found and normalize it to 0-1 range.
+        If the score is already in 0-1 range, we keep it as-is.
         
         Args:
             response_text: Raw response from the model
@@ -316,8 +317,10 @@ On a scale of 0 to 100, how relevant is this document to the query? Provide only
         if match:
             try:
                 score = float(match.group())
-                # Normalize to 0-1 range (assuming 0-100 scale)
-                score = score / 100.0
+                # Normalize to 0-1 range only if score > 1 (assuming 0-100 scale)
+                # If score is already <= 1, keep it as-is (already normalized)
+                if score > 1.0:
+                    score = score / 100.0
                 return max(0.0, min(1.0, score))
             except ValueError:
                 pass

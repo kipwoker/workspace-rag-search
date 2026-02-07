@@ -575,9 +575,20 @@ class WorkspaceRagSearchTool:
                 "query": query
             })
         
+        # Initialize performance metrics tracking
+        metrics_enabled = self.rag_config.metrics_enabled
         rerank_start_time = None
         rerank_latency_ms = None
         search_start_time = time.time()
+        timing = {
+            "semantic_search_ms": 0.0,
+            "bm25_build_ms": 0.0,
+            "bm25_score_ms": 0.0,
+            "rrf_fusion_ms": 0.0,
+            "rerank_ms": 0.0,
+            "fetch_results_ms": 0.0,
+            "total_ms": 0.0
+        }
         
         # Check cache first
         cached_result = None
@@ -600,16 +611,19 @@ class WorkspaceRagSearchTool:
                     logger.warning("Cached result is invalid JSON, proceeding with search")
         
         try:
-            # Phase 1: Independent Retrieval
-            # Get semantic results from ChromaDB
+            # Phase 1: Independent Retrieval - Semantic Search
+            phase_start = time.time()
             semantic_limit = min(limit * 20, 100)  # Get more candidates for better fusion
             semantic_results = self._collection.query(
                 query_texts=[query.strip()],
                 n_results=semantic_limit
             )
+            timing["semantic_search_ms"] = round((time.time() - phase_start) * 1000, 2)
             
-            # Get BM25 results from global index
+            # Phase 1b: Build BM25 Index
+            phase_start = time.time()
             bm25_index = self._build_global_bm25_index(path_filter)
+            timing["bm25_build_ms"] = round((time.time() - phase_start) * 1000, 2)
             
             if len(bm25_index) == 0:
                 return json.dumps({
@@ -619,9 +633,12 @@ class WorkspaceRagSearchTool:
                     "query": query
                 })
             
+            # Phase 1c: Score with BM25
+            phase_start = time.time()
             bm25_scores = bm25_index.score(query)
             bm25_ranked = sorted(bm25_scores.items(), key=lambda x: x[1], reverse=True)
             bm25_ranked = bm25_ranked[:semantic_limit]  # Match semantic result count
+            timing["bm25_score_ms"] = round((time.time() - phase_start) * 1000, 2)
             
             # Check if we have any results
             semantic_empty = (not semantic_results or 
@@ -657,6 +674,7 @@ class WorkspaceRagSearchTool:
                     semantic_ranked.append((doc_id, semantic_score))
             
             # Phase 3: RRF Fusion
+            phase_start = time.time()
             rrf = ReciprocalRankFusion(k=rrf_k)
             ranked_lists = []
             if semantic_ranked:
@@ -665,6 +683,7 @@ class WorkspaceRagSearchTool:
                 ranked_lists.append(bm25_ranked)
             
             fused_results = rrf.fuse(ranked_lists, limit=limit)
+            timing["rrf_fusion_ms"] = round((time.time() - phase_start) * 1000, 2)
             
             if not fused_results:
                 return json.dumps({
@@ -703,7 +722,8 @@ class WorkspaceRagSearchTool:
                 
                 # Convert back to (doc_id, score) format
                 reranked_results = [(doc_id, score) for doc_id, score, _ in reranked]
-                rerank_latency_ms = round((time.time() - rerank_start_time) * 1000, 2)
+                timing["rerank_ms"] = round((time.time() - rerank_start_time) * 1000, 2)
+                rerank_latency_ms = timing["rerank_ms"]
                 
                 logger.debug(
                     "Reranking completed in %dms for %d documents",
@@ -711,11 +731,13 @@ class WorkspaceRagSearchTool:
                 )
             
             # Phase 5: Fetch document details for top results
+            phase_start = time.time()
             final_doc_ids = [doc_id for doc_id, _ in reranked_results]
             doc_data = self._collection.get(
                 ids=final_doc_ids,
                 include=["documents", "metadatas"]
             )
+            timing["fetch_results_ms"] = round((time.time() - phase_start) * 1000, 2)
             
             # Create lookup maps
             doc_lookup = {}
@@ -806,6 +828,12 @@ class WorkspaceRagSearchTool:
             bm25_hits = sum(1 for r in scored_results if r['bm25_rank'] is not None)
             both_hits = sum(1 for r in scored_results if r['semantic_rank'] and r['bm25_rank'])
             
+            # Calculate diversity metrics
+            diversity = self._calculate_diversity_metrics(scored_results)
+            
+            # Calculate total latency
+            timing["total_ms"] = round((time.time() - search_start_time) * 1000, 2)
+            
             # Build response
             response = {
                 "status": "success",
@@ -831,9 +859,20 @@ class WorkspaceRagSearchTool:
             else:
                 response["reranking"] = {"enabled": False}
             
-            # Calculate total latency
-            total_latency_ms = round((time.time() - search_start_time) * 1000, 2)
-            response["latency_ms"] = total_latency_ms
+            # Add performance metrics if enabled
+            if metrics_enabled:
+                response["metrics"] = {
+                    "latency": timing,
+                    "diversity": diversity,
+                    "coverage": {
+                        "semantic_hits": semantic_hits,
+                        "bm25_hits": bm25_hits,
+                        "both_hits": both_hits,
+                        "total_results": len(scored_results)
+                    }
+                }
+            
+            response["latency_ms"] = timing["total_ms"]
             response["cached"] = False
             
             # Store in cache
@@ -993,3 +1032,62 @@ class WorkspaceRagSearchTool:
                 "reason": "Failed to clear cache",
                 "exception": str(e)
             })
+
+    def _calculate_diversity_metrics(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calculate diversity metrics for search results.
+        
+        Metrics include:
+        - unique_files: Number of unique files in results
+        - file_diversity_ratio: Ratio of unique files to total results (0-1)
+        - score_range: Difference between highest and lowest scores
+        - score_std: Standard deviation of scores
+        - method_agreement: How often semantic and BM25 agree on top results
+        
+        Args:
+            results: List of scored result dictionaries
+            
+        Returns:
+            Dictionary containing diversity metrics
+        """
+        if not results:
+            return {
+                "unique_files": 0,
+                "file_diversity_ratio": 0.0,
+                "score_range": 0.0,
+                "score_std": 0.0,
+                "method_agreement": 0.0
+            }
+        
+        # Calculate file diversity
+        unique_files = set()
+        for r in results:
+            metadata = r.get("metadata", {})
+            file_path = metadata.get("file_path", "")
+            if file_path:
+                unique_files.add(file_path)
+        
+        file_diversity_ratio = len(unique_files) / len(results) if results else 0.0
+        
+        # Calculate score distribution metrics
+        scores = [r.get("final_score", 0.0) for r in results]
+        score_range = max(scores) - min(scores) if scores else 0.0
+        
+        # Calculate standard deviation
+        if len(scores) > 1:
+            mean_score = sum(scores) / len(scores)
+            variance = sum((s - mean_score) ** 2 for s in scores) / len(scores)
+            score_std = variance ** 0.5
+        else:
+            score_std = 0.0
+        
+        # Calculate method agreement (how often both methods found the same doc)
+        results_with_both = [r for r in results if r.get("semantic_rank") and r.get("bm25_rank")]
+        method_agreement = len(results_with_both) / len(results) if results else 0.0
+        
+        return {
+            "unique_files": len(unique_files),
+            "file_diversity_ratio": round(file_diversity_ratio, 3),
+            "score_range": round(score_range, 4),
+            "score_std": round(score_std, 4),
+            "method_agreement": round(method_agreement, 3)
+        }

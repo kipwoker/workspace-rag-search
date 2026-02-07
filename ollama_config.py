@@ -49,6 +49,8 @@ class RAGConfig:
         cache_enabled: Whether to enable query result caching
         cache_max_size: Maximum number of cached query results
         cache_ttl_seconds: Cache entry time-to-live in seconds (None = no expiration)
+        metrics_enabled: Whether to enable detailed performance metrics collection
+            and display (latency breakdown, diversity scores, coverage metrics)
     
     Example:
         >>> config = RAGConfig(
@@ -66,7 +68,8 @@ class RAGConfig:
         ...     rerank_max_concurrent=5,
         ...     cache_enabled=True,
         ...     cache_max_size=100,
-        ...     cache_ttl_seconds=300
+        ...     cache_ttl_seconds=300,
+        ...     metrics_enabled=True
         ... )
     """
     vector_store_path: str
@@ -84,6 +87,7 @@ class RAGConfig:
     cache_enabled: bool = field(default=True)
     cache_max_size: int = field(default=100)
     cache_ttl_seconds: Optional[int] = field(default=None)
+    metrics_enabled: bool = field(default=True)
 
 RAG_CONFIG_DEFAULT = RAGConfig(
     vector_store_path="./.vectorstore",
@@ -101,6 +105,7 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     cache_enabled=True,          # Enable query caching by default
     cache_max_size=100,          # Cache up to 100 queries
     cache_ttl_seconds=None,      # No expiration (cache until index refresh)
+    metrics_enabled=True,        # Enable performance metrics by default
 )
 
 
@@ -121,6 +126,7 @@ RAG_CONFIG_FAST = RAGConfig(
     cache_enabled=True,          # Enable caching for repeated queries
     cache_max_size=50,           # Smaller cache for memory efficiency
     cache_ttl_seconds=60,        # 1 minute TTL for fast-changing code
+    metrics_enabled=False,       # Disable metrics for minimal overhead
 )
 
 RAG_CONFIG_CONSERVATIVE = RAGConfig(
@@ -139,4 +145,5 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     cache_enabled=True,          # Enable caching
     cache_max_size=200,          # Larger cache since we're conservative on speed
     cache_ttl_seconds=600,       # 10 minute TTL
+    metrics_enabled=True,        # Enable metrics for observability
 )
