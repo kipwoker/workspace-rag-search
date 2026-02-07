@@ -18,6 +18,15 @@ BM25Implementation = Literal[
     "adpt",       # BM25-Adpt with adaptive parameter tuning
 ]
 
+# Available reranking models
+RerankModel = Literal[
+    "phi3:mini",      # Lightweight, fast, good for quick reranking
+    "qwen3:0.6b",     # Small but capable, default choice
+]
+
+# Default reranking model - uses /api/generate to score relevance
+RERANK_MODEL: RerankModel = "phi3:mini"
+
 @dataclass
 class RAGConfig:
     """RAG configuration model.
@@ -32,6 +41,11 @@ class RAGConfig:
         embedding_batch_size: Number of texts per embedding API call
         bm25_implementation: BM25 variant to use for keyword scoring
             Options: "standard", "plus", "l", "t", "adpt"
+        rerank_enabled: Whether to enable cross-encoder reranking
+        rerank_model: Name of the Ollama reranking model to use.
+            Options: "phi3:mini", "qwen3:0.6b"
+        rerank_top_k: Number of documents to rerank (more = better quality but slower)
+        rerank_max_concurrent: Concurrent reranking requests (lower = less VRAM)
     
     Example:
         >>> config = RAGConfig(
@@ -42,7 +56,11 @@ class RAGConfig:
         ...     bytes_limit=100000,
         ...     max_concurrent_requests=10,
         ...     embedding_batch_size=32,
-        ...     bm25_implementation="plus"
+        ...     bm25_implementation="plus",
+        ...     rerank_enabled=True,
+        ...     rerank_model="qwen3:0.6b",
+        ...     rerank_top_k=20,
+        ...     rerank_max_concurrent=5
         ... )
     """
     vector_store_path: str
@@ -53,6 +71,10 @@ class RAGConfig:
     max_concurrent_requests: int = field(default=10)
     embedding_batch_size: int = field(default=32)
     bm25_implementation: BM25Implementation = field(default="plus")
+    rerank_enabled: bool = field(default=True)
+    rerank_model: RerankModel = field(default=RERANK_MODEL)
+    rerank_top_k: int = field(default=20)
+    rerank_max_concurrent: int = field(default=5)
 
 RAG_CONFIG_DEFAULT = RAGConfig(
     vector_store_path="./.vectorstore",
@@ -63,6 +85,10 @@ RAG_CONFIG_DEFAULT = RAGConfig(
     max_concurrent_requests=10,  # 10 concurrent embedding requests
     embedding_batch_size=32,     # 32 texts per request
     bm25_implementation="plus",  # Default to BM25+ for better RRF fusion
+    rerank_enabled=True,         # Enable reranking by default
+    rerank_model=RERANK_MODEL,
+    rerank_top_k=20,             # Rerank top 20 RRF results
+    rerank_max_concurrent=5,     # 5 concurrent reranking requests
 )
 
 
@@ -76,6 +102,10 @@ RAG_CONFIG_FAST = RAGConfig(
     max_concurrent_requests=20,  # Higher concurrency for faster indexing
     embedding_batch_size=64,     # Larger batches for fewer API calls
     bm25_implementation="plus",
+    rerank_enabled=False,        # Disable reranking for speed
+    rerank_model=RERANK_MODEL,
+    rerank_top_k=20,
+    rerank_max_concurrent=5,
 )
 
 RAG_CONFIG_CONSERVATIVE = RAGConfig(
@@ -87,4 +117,8 @@ RAG_CONFIG_CONSERVATIVE = RAGConfig(
     max_concurrent_requests=5,   # Lower concurrency for limited resources
     embedding_batch_size=16,     # Smaller batches
     bm25_implementation="plus",
+    rerank_enabled=True,
+    rerank_model=RERANK_MODEL,
+    rerank_top_k=10,             # Rerank fewer documents
+    rerank_max_concurrent=2,     # Lower VRAM usage
 )
